@@ -2,6 +2,8 @@
 .vscode/
 CMakeFiles/
 lib/
+libs/
+libs2/
 Makefile
 CMakeCache.txt
 CTestTestfile.cmake

@@ -1,5 +1,10 @@
 ![logo](gl4es.png "gl4es logo")
 
+Next Generation GL4ES
+====
+
+Next Generation GL4ES (NG-GL4ES) is a fork from gl4es-114-extra ("https://github.com/PojavLauncherTeam/gl4es-114-extra"). This project is making it support more OpenGL functions.
+
 GL4ES - OpenGL for GLES Hardware
 ====
 

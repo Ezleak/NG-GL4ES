@@ -7,10 +7,10 @@
 #include "loader.h"
 #include "shaderconv.h"
 #include "vgpu/shaderconv.h"
-#include "../glsl/glsl_for_es.h"
+//#include "../glsl/glsl_for_es.h"
 //#define USE_LTW_SHADER_CONVERTER //THIS IS UNSUPPORTED
 
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 #define DBG(a) a
 #else
@@ -204,11 +204,11 @@ void gl4es_glShaderSource(GLuint shader, GLsizei count, const GLchar * const *st
         if(glstate->glsl->es2 && !strncmp(glshader->source, "#version 100", 12))
             glshader->converted = strdup(glshader->source);
         else{
-            //glshader->converted = ConvertShaderConditionally(glshader);
-            glshader->converted = GLSLtoGLSLES(glshader->source, glshader->type);
-            SHUT_LOGD("[INFO] [Shader] Shader source: ");
-            SHUT_LOGD("%s", glshader->source);
-            SHUT_LOGD("\n[INFO] [Shader] Converted Shader source: \n%s", glshader->converted);
+            glshader->converted = ConvertShaderConditionally(glshader);
+            //glshader->converted = GLSLtoGLSLES(glshader->source, glshader->type);
+            //SHUT_LOGD("[INFO] [Shader] Shader source: ");
+            //SHUT_LOGD("%s", glshader->source);
+            //SHUT_LOGD("\n[INFO] [Shader] Converted Shader source: \n%s", glshader->converted);
         }
 #endif
 

@@ -108,7 +108,7 @@ LOCAL_CPP_SRC_FILES := \
 
 LOCAL_SRC_FILES := $(LOCAL_C_SRC_FILES) $(LOCAL_CPP_SRC_FILES)
 
-LOCAL_CFLAGS += -g -std=gnu17 -funwind-tables -O3 -fvisibility=hidden -include include/android_debug.h
+LOCAL_CFLAGS += -g -std=gnu99 -funwind-tables -O3 -fvisibility=hidden -include include/android_debug.h
 LOCAL_CFLAGS += -DNOX11
 LOCAL_CFLAGS += -DNO_GBM
 #LOCAL_CFLAGS += -DNO_INIT_CONSTRUCTOR

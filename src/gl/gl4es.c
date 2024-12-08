@@ -1225,7 +1225,7 @@ void gl4es_glVertexP3ui(GLuint p1, GLuint p2, GLuint p3) __attribute__((visibili
 }
 void glVertexP3ui(GLuint p1, GLuint p2, GLuint p3) AliasExport("gl4es_glVertexP3ui");
 
-
+/*
 void gl4es_glVertexP4ui(GLuint p1, GLuint p2, GLuint p3, GLuint p4) __attribute__((visibility("default"))) {
     if (glstate->list.active) {
         rlVertexP4ui(glstate->list.active, p1, p2, p3, p4);
@@ -1273,7 +1273,7 @@ void gl4es_glVertexP4uiv(GLuint* p) __attribute__((visibility("default"))) {
 }
 void glVertexP4uiv(GLuint* p) AliasExport("gl4es_glVertexP4uiv");
 
-#if defined(AMIGAOS4) || (defined(NOX11) && defined(NOEGL))
+#if defined(AMIGAOS4) || (defined(NOX11) && defined(NOEGL)) */
 #ifdef AMIGAOS4
 void amiga_pre_swap()
 #else

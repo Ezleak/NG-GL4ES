@@ -14,7 +14,7 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 
 LOCAL_EXPORT_C_INCLUDES := $(LOCAL_C_INCLUDES) -DBCMHOST
 
-LOCAL_LDLIBS := -ldl -llog -lc++_static -lstdc++ -lc++abi
+LOCAL_LDLIBS := -ldl -llog -lstdc++ -lGLESv2 -lGLESv3 -lEGL
 
 LOCAL_CPPFLAGS := -std=c++17 -fvisibility=hidden -funwind-tables -g -D_THREAD_SAFE -fPIC
 
@@ -114,4 +114,4 @@ LOCAL_CFLAGS += -DNO_GBM
 #LOCAL_CFLAGS += -DNO_INIT_CONSTRUCTOR
 LOCAL_CFLAGS += -DDEFAULT_ES=2
 
-include $(BUILD_SHARED_LIBRARY)
+include $(BUILD_STATIC_LIBRARY)

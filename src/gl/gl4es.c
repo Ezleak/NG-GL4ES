@@ -24,10 +24,6 @@
 #define DBG(a)
 #endif
 
-void rlVertexP2ui(GLenum mode, GLuint p1, GLuint p2);
-void rlVertexP3ui(GLenum mode, GLuint p1, GLuint p2, GLuint p3);
-void rlVertexP4ui(GLenum mode, GLuint p1, GLuint p2, GLuint p3, GLuint p4);
-
 int adjust_vertices(GLenum mode, int nb) {
     switch (mode) {
         case GL_POINTS:

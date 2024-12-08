@@ -1202,7 +1202,8 @@ void gl4es_use_scratch_indices(int use) {
 }
 
 
-void gl4es_glVertexP2ui(GLuint p1, GLuint p2) __attribute__((visibility("default"))) {
+void gl4es_glVertexP2ui(GLuint p1, GLuint p2) __attribute__((visibility("default")));
+void gl4es_glVertexP2ui(GLuint p1, GLuint p2) {
     if (glstate->list.active) {
         rlVertexP2ui(glstate->list.active, p1, p2);
         noerrorShimNoPurge();
@@ -1214,7 +1215,8 @@ void gl4es_glVertexP2ui(GLuint p1, GLuint p2) __attribute__((visibility("default
 void glVertexP2ui(GLuint p1, GLuint p2) AliasExport("gl4es_glVertexP2ui");
 
 
-void gl4es_glVertexP3ui(GLuint p1, GLuint p2, GLuint p3) __attribute__((visibility("default"))) {
+void gl4es_glVertexP3ui(GLuint p1, GLuint p2, GLuint p3) __attribute__((visibility("default")));
+void gl4es_glVertexP3ui(GLuint p1, GLuint p2, GLuint p3) {
     if (glstate->list.active) {
         rlVertexP3ui(glstate->list.active, p1, p2, p3);
         noerrorShimNoPurge();
@@ -1226,7 +1228,8 @@ void gl4es_glVertexP3ui(GLuint p1, GLuint p2, GLuint p3) __attribute__((visibili
 void glVertexP3ui(GLuint p1, GLuint p2, GLuint p3) AliasExport("gl4es_glVertexP3ui");
 
 
-void gl4es_glVertexP4ui(GLuint p1, GLuint p2, GLuint p3, GLuint p4) __attribute__((visibility("default"))) {
+void gl4es_glVertexP4ui(GLuint p1, GLuint p2, GLuint p3, GLuint p4) __attribute__((visibility("default")));
+void gl4es_glVertexP4ui(GLuint p1, GLuint p2, GLuint p3, GLuint p4) {
     if (glstate->list.active) {
         rlVertexP4ui(glstate->list.active, p1, p2, p3, p4);
         noerrorShimNoPurge();
@@ -1238,7 +1241,8 @@ void gl4es_glVertexP4ui(GLuint p1, GLuint p2, GLuint p3, GLuint p4) __attribute_
 void glVertexP4ui(GLuint p1, GLuint p2, GLuint p3, GLuint p4) AliasExport("gl4es_glVertexP4ui");
 
 
-void gl4es_glVertexP2uiv(GLuint* p) __attribute__((visibility("default"))) {
+void gl4es_glVertexP2uiv(GLuint* p) __attribute__((visibility("default")));
+void gl4es_glVertexP2uiv(GLuint* p) {
     if (glstate->list.active) {
         rlVertexP2uiv(glstate->list.active, p);
         noerrorShimNoPurge();
@@ -1250,7 +1254,8 @@ void gl4es_glVertexP2uiv(GLuint* p) __attribute__((visibility("default"))) {
 void glVertexP2uiv(GLuint* p) AliasExport("gl4es_glVertexP2uiv");
 
 
-void gl4es_glVertexP3uiv(GLuint* p) __attribute__((visibility("default"))) {
+void gl4es_glVertexP3uiv(GLuint* p) __attribute__((visibility("default")));
+void gl4es_glVertexP3uiv(GLuint* p) {
     if (glstate->list.active) {
         rlVertexP3uiv(glstate->list.active, p);
         noerrorShimNoPurge();
@@ -1262,7 +1267,8 @@ void gl4es_glVertexP3uiv(GLuint* p) __attribute__((visibility("default"))) {
 void glVertexP3uiv(GLuint* p) AliasExport("gl4es_glVertexP3uiv");
 
 
-void gl4es_glVertexP4uiv(GLuint* p) __attribute__((visibility("default"))) {
+void gl4es_glVertexP4uiv(GLuint* p) __attribute__((visibility("default")));
+void gl4es_glVertexP4uiv(GLuint* p) {
     if (glstate->list.active) {
         rlVertexP4uiv(glstate->list.active, p);
         noerrorShimNoPurge();

@@ -14,11 +14,10 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/include
 
 LOCAL_EXPORT_C_INCLUDES := $(LOCAL_C_INCLUDES) -DBCMHOST
 
-LOCAL_LDLIBS := -ldl -llog -lc++_static -lstdc++ -lc++abi
-
+LOCAL_LDLIBS := -ldl -llog
 LOCAL_CPPFLAGS := -std=c++17 -fvisibility=hidden -funwind-tables -g -D_THREAD_SAFE -fPIC
 
-LOCAL_CPPFLAGS += -O0 -fno-inline
+LOCAL_CPPFLAGS += -O3 -fno-inline
 
 LOCAL_CFLAGS += -fPIC
 

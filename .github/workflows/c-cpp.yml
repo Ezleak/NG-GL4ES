@@ -1,20 +1,29 @@
-name: C/C++ CI
+name: Build
 
-on:
-  push:
-  workflow_dispatch:
+on: [push, workflow_dispatch]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - name: make
-      shell: bash
-      run: cmake --build . --config ${{ matrix.build_type }} --target install ${{ env.PARALLEL }}
-    - name: Upload GL4ES libs
-      uses: actions/upload-artifact@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake libgl1-mesa-dev
+
+    - name: Configure CMake
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Upload
+      uses: actions/upload-artifact@v3
       with:
-       name: gl4es-114-android
-       path: libs/*
+        name: ng-gl4es-release
+        path: build/*
+        if-no-files-found: error

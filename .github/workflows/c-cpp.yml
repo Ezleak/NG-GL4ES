@@ -10,17 +10,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Install Android NDK
-      run: |
-        
-         # wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
-         # unzip android-ndk-r25c-linux.zip >> /dev/null
-         $ANDROID_NDK_HOME/ndk-build
-
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake libgl1-mesa-dev
+        sudo apt-get install -y build-essential cmake libgl1-mesa-dev android-ndk
 
     - name: Configure CMake
       run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++

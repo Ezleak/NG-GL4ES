@@ -12,7 +12,7 @@ jobs:
 
     - name: Install Android NDK
       run: |
-       wget https://dl.google.com/android/repository/android-ndk-r27c-linux-x86_64.zip
+       # wget https://dl.google.com/android/repository/android-ndk-r27c-linux-x86_64.zip
         mkdir -p /usr/local/android-ndk
         unzip -q android-ndk-r27c-linux-x86_64.zip -d /usr/local/android-ndk
         mv /usr/local/android-ndk/android-ndk-r27c /usr/local/android-ndk/android-ndk

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ng_gl4es)
 
-set(CMAKE_CXX_STANDARD 16)
+set(CMAKE_CXX_STANDARD 19)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

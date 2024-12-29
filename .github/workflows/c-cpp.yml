@@ -12,9 +12,9 @@ jobs:
 
     - name: Install Android NDK
       run: |
-        wget https://dl.google.com/android/repository/android-ndk-r25c-linux-x86_64.zip
-        sudo unzip -q android-ndk-r25c-linux-x86_64.zip -d /usr/local
-        sudo mv /usr/local/android-ndk-r25c /usr/local/android-ndk
+        wget https://dl.google.com/android/repository/android-ndk-r27c-linux-x86_64.zip
+        sudo unzip -q android-ndk-r27c-linux-x86_64.zip -d /usr/local
+        sudo mv /usr/local/android-ndk-r27c /usr/local/android-ndk
         echo "ANDROID_NDK_HOME=/usr/local/android-ndk" >> $GITHUB_ENV
         echo "$ANDROID_NDK_HOME" >> $GITHUB_PATH
 

@@ -9,7 +9,7 @@ jobs:
         run: |
          # wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip
          # unzip android-ndk-r25c-linux.zip >> /dev/null
-         $ANDROID_NDK_HOME/ndk-build APP_BUILD_SCRIPT=./Android.mk APP_PLATFORM=24 NDK_PROJECT_PATH=.
+         $ANDROID_NDK_HOME/ndk-build APP_BUILD_SCRIPT=./CMakeLists.txt APP_PLATFORM=24 NDK_PROJECT_PATH=.
       - name: Upload GL4ES libs
         uses: actions/upload-artifact@v4
         with:

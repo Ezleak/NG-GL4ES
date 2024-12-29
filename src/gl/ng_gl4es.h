@@ -16,7 +16,6 @@
 #define GL_PROGRAM_BINARY_FORMAT_MESA     0x875F
 
 #include <GL/gl.h>
-#include <vector>
 #include <functional>
 #include <map>
 #include <unordered_map>

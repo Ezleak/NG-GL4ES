@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ng_gl4es)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 16)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -114,8 +114,7 @@ target_link_libraries(ng_gl4es
 #        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-util.a
         ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-c-shared.so
         log
-        c
-        c++
+        android
         dl
         )
 

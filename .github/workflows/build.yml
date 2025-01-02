@@ -12,6 +12,8 @@ jobs:
           unzip android-ndk-r25c-linux.zip -d $HOME >> /dev/null
       - name: Build Krypton Wrapper
         run: |
+          apt update
+          sudo apt install cmake
           mkdir -p build
           cd build
           cmake .. -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake

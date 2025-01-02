@@ -12,6 +12,9 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNOX11 -fPIC -DNO_GBM -DDEFAULT_ES=2 -g -st
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 
+set(CMAKE_C_COMPILER clang)
+set(CMAKE_CXX_COMPILER clang++)
+
 set(CMAKE_ANDROID_STL_TYPE c++_static)
 
 set(CMAKE_BUILD_TYPE Release)

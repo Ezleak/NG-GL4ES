@@ -12,7 +12,7 @@ jobs:
           unzip android-ndk-r25c-linux.zip -d $HOME >> /dev/null
       - name: Build Krypton Wrapper
         run: |
-          apt update
+          sudo apt update
           sudo apt install cmake
           mkdir -p build
           cd build

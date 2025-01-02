@@ -1,5 +1,5 @@
 name: Build NG-GL4ES
-on: [workflow_dispatch,push]
+on: [workflow_dispatch, push]
 jobs:
   build-android:
     runs-on: ubuntu-latest
@@ -17,7 +17,7 @@ jobs:
 
           mkdir -p build
           cd build
-          cmake .. -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DCMAKE_C_COMPILER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -DCMAKE_CXX_COMPILER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DCMAKE_MAKE_PROGRAM=/usr/bin/make
+          cmake .. -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake -DCMAKE_C_COMPILER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -DCMAKE_CXX_COMPILER=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
           cmake --build .
       - name: Upload Krypton Wrapper libs
         uses: actions/upload-artifact@v3

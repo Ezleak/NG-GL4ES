@@ -6,29 +6,18 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -funwind-tables -g -D_THREAD_SAFE -fPIC -stdlib=libc++")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -fPIC -DPIC -flto=thin -fwhole-program-vtables -mllvm -polly -pthread -Wall -fno-emulated-tls -march=armv8-a+simd+crc+crypto+fp16 -fdata-sections -ffunction-sections -fmerge-all-constants -DNDEBUG -DNOX11 -DNO_GBM -DDEFAULT_ES=2 -funwind-tables -fvisibility=hidden -include ${CMAKE_SOURCE_DIR}/include/android_debug.h")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fPIC -DPIC -flto=thin -fwhole-program-vtables -mllvm -polly -pthread -Wall -fno-emulated-tls -march=armv8-a+simd+crc+crypto+fp16 -fdata-sections -ffunction-sections -fmerge-all-constants -DNDEBUG -fvisibility=hidden -funwind-tables -D_THREAD_SAFE")
-set(LINK_OPTIONS "${CMAKE_LINK_OPTIONS} -fuse-ld=lld -flto=thin -Wl,-plugin-opt=-emulated-tls=0")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_LINK_OPTIONS} -fuse-ld=lld -flto=thin -Wl,-plugin-opt=-emulated-tls=0")
-set(CMAKE_ANDROID_STL_TYPE system)
-set(CMAKE_ANDROID_LD "lld")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNOX11 -fPIC -DNO_GBM -DDEFAULT_ES=3 -g -std=gnu99 -funwind-tables -Ofast -fvisibility=hidden")
+
+set(CMAKE_BUILD_TYPE Release)
 
 include_directories(${CMAKE_SOURCE_DIR}/include )
 
-#NOX11
-if(NOX11)
-    add_definitions(-DNOX11)
-endif()
-
-#NOEGL
-if(NOEGL)
-    add_definitions(-DNOEGL)
-    add_definitions(-DNOX11)
-endif()
-
 set(C_SRC_FILES
+        src/gl/string_utils.c
+        src/gl/cJSON.c
+        src/gl/config.c
         src/gl/arbconverter.c
         src/gl/arbgenerator.c
         src/gl/arbhelper.c
@@ -53,7 +42,6 @@ set(C_SRC_FILES
         src/gl/fpe_shader.c
         src/gl/framebuffers.c
         src/gl/gl_lookup.c
-        src/gl/getter.c
         src/gl/gl4es.c
         src/gl/glstate.c
         src/gl/hint.c
@@ -81,7 +69,6 @@ set(C_SRC_FILES
         src/gl/shader_hacks.c
         src/gl/stack.c
         src/gl/stencil.c
-        src/gl/string_utils.c
         src/gl/stubs.c
         src/gl/texenv.c
         src/gl/texgen.c
@@ -102,11 +89,12 @@ set(C_SRC_FILES
         src/glx/gbm.c
         src/glx/streaming.c
         src/gl/vgpu/shaderconv.c
+        src/gl/samplers.c
         )
 
 set(CPP_SRC_FILES
-        src/gl/translator.cpp
         src/glsl/glsl_for_es.cpp
+        src/gl/getter.cpp
         )
 
 set(SRC_FILES ${CPP_SRC_FILES} ${C_SRC_FILES})
@@ -117,13 +105,8 @@ add_library(ng_gl4es SHARED ${SRC_FILES})
 
 target_link_libraries(ng_gl4es
         ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libglslang.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-core.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-cpp.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-glsl.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-reflect.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-util.a
-        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libSPIRV-Tools-shared.so
         ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-c-shared.so
+        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libSPIRV-Tools-shared.so
         log
         dl
         )

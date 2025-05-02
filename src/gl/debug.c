@@ -118,8 +118,13 @@ const char* PrintEnum(GLenum what) {
         p(GL_MAX_TEXTURE_COORDS);
         // texture pack/unpack
         p(GL_UNPACK_ALIGNMENT);
-        p(GL_PACK_ALIGNMENT);
         p(GL_UNPACK_ROW_LENGTH);
+        p(GL_UNPACK_SKIP_PIXELS);
+        p(GL_UNPACK_SKIP_ROWS);
+        p(GL_PACK_ALIGNMENT);
+        p(GL_PACK_ROW_LENGTH);
+        p(GL_PACK_SKIP_PIXELS);
+        p(GL_PACK_SKIP_ROWS);
         // framebuffer
         p(GL_COLOR_ATTACHMENT0);
         p(GL_COLOR_ATTACHMENT1);
@@ -138,6 +143,8 @@ const char* PrintEnum(GLenum what) {
         p(GL_STATIC_DRAW);
         p(GL_STREAM_DRAW);
         p(GL_READ_WRITE);
+        p(GL_COPY_WRITE_BUFFER);
+        p(GL_COPY_READ_BUFFER);
         p(GL_ARRAY_BUFFER);
         p(GL_ELEMENT_ARRAY_BUFFER);
         p(GL_PIXEL_PACK_BUFFER);
@@ -418,7 +425,7 @@ void CheckGLError(int fwd) {
     LOAD_GLES(glGetError);
     GLenum err=gles_glGetError();
     if(err!=GL_NO_ERROR) {
-        printf("LIBGL: glGetError(): %s\n", PrintEnum(err));
+        SHUT_LOGD("LIBGL: glGetError(): %s\n", PrintEnum(err));
         if(fwd)
             errorShim(err);
     }

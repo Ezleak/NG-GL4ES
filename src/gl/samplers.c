@@ -9,6 +9,7 @@
 #include "init.h"
 #include "loader.h"
 #include "texture.h"
+#include "../../include/khash.h"
 
 //#define DEBUG
 #ifdef DEBUG
@@ -34,7 +35,7 @@ glsampler_t* find_sampler(GLuint sampler) {
     khint_t k;
     khash_t(samplerlist_t) *list = glstate->samplers.samplerlist;
     k = kh_get(samplerlist_t, list, sampler);
-    
+
     if (k != kh_end(list)){
         return kh_value(list, k);
     }
@@ -54,6 +55,9 @@ void del_sampler(GLuint sampler) {
         for (int i=0; i<MAX_TEX; ++i)
             if(glstate->samplers.sampler[i]==s)
                 glstate->samplers.sampler[i] = NULL;
+        LOAD_GLES(glDeleteSamplers);
+        GLuint gles_id = s->glname;
+        gles_glDeleteSamplers(1, &gles_id);
         free(s);
     }
 }
@@ -61,7 +65,6 @@ void del_sampler(GLuint sampler) {
 void init_sampler(glsampler_t* sampler)
 {
     memset(sampler, 0, sizeof(glsampler_t));
-    // set default value for sampler
     sampler->min_filter = GL_NEAREST_MIPMAP_LINEAR;
     sampler->mag_filter = GL_LINEAR;
     sampler->wrap_s = sampler->wrap_t = (globals4es.defaultwrap?0:GL_REPEAT);
@@ -72,24 +75,14 @@ void init_sampler(glsampler_t* sampler)
 void gl4es_glGenSamplers(GLsizei n, GLuint *ids)
 {
     DBG(SHUT_LOGD("glGenSamplers(%i, %p)\n", n, ids);)
-    // no hardware support taken into account for now
-    /*LOAD_GLES2_OR_OES(glGenFramebuffers);
-    GLsizei m = 0;
-    noerrorShim();
-    if(n-m) {
-        errorGL();
-        gles_glGenFramebuffers(n-m, ids+m);
-    }*/
     FLUSH_BEGINEND;
-	noerrorShim();
+    noerrorShim();
     if (n<1) {
-		errorShim(GL_INVALID_VALUE);
+        errorShim(GL_INVALID_VALUE);
         return;
     }
-    for (int i=0; i<n; i++) {
-        ids[i] = new_sampler(++glstate->samplers.last_sampler);
-    }
-    // track the samplers...
+    LOAD_GLES(glGenSamplers);
+    gles_glGenSamplers(n, ids);
     int ret;
     khint_t k;
     khash_t(samplerlist_t) *list = glstate->samplers.samplerlist;
@@ -98,13 +91,20 @@ void gl4es_glGenSamplers(GLsizei n, GLuint *ids)
         glsampler_t *sampler = kh_value(list, k) = malloc(sizeof(glsampler_t));
         init_sampler(sampler);
         sampler->glname = ids[i];
+        LOAD_GLES(glSamplerParameteri);
+        LOAD_GLES(glSamplerParameterf);
+        gles_glSamplerParameteri(ids[i], GL_TEXTURE_MIN_FILTER, sampler->min_filter);
+        gles_glSamplerParameteri(ids[i], GL_TEXTURE_MAG_FILTER, sampler->mag_filter);
+        gles_glSamplerParameteri(ids[i], GL_TEXTURE_WRAP_S, sampler->wrap_s);
+        gles_glSamplerParameteri(ids[i], GL_TEXTURE_WRAP_T, sampler->wrap_t);
+        gles_glSamplerParameterf(ids[i], GL_TEXTURE_MIN_LOD, sampler->min_lod);
+        gles_glSamplerParameterf(ids[i], GL_TEXTURE_MAX_LOD, sampler->max_lod);
     }
 }
 
 void gl4es_glBindSampler(GLuint unit, GLuint sampler)
 {
-    DBG(SHUT_LOGD("gl4es_glBindSample(%u, %u)\n", unit, sampler);)
-
+    DBG(SHUT_LOGD("gl4es_glBindSampler(%u, %u)\n", unit, sampler);)
     if(unit>hardext.maxtex) {
         errorShim(GL_INVALID_VALUE);
         return;
@@ -116,6 +116,11 @@ void gl4es_glBindSampler(GLuint unit, GLuint sampler)
     }
     noerrorShim();
     glstate->samplers.sampler[unit] = s;
+    LOAD_GLES(glBindSampler);
+    if (s)
+        gles_glBindSampler(unit, s->glname);
+    else
+        gles_glBindSampler(unit, 0);
     if(glstate->bound_changed<unit+1)
         glstate->bound_changed = unit+1;
 }
@@ -288,6 +293,8 @@ void gl4es_glSamplerParameterf(GLuint sampler, GLenum pname, GLfloat param)
         errorShim(GL_INVALID_ENUM);
     else if(!samplerParameterfv(s, pname, &param))
         errorShim(GL_INVALID_ENUM);
+    LOAD_GLES(glSamplerParameterf);
+    gles_glSamplerParameterf(s->glname, pname, param);
 }
 void gl4es_glSamplerParameteri(GLuint sampler, GLenum pname, GLint param)
 {
@@ -301,6 +308,8 @@ void gl4es_glSamplerParameteri(GLuint sampler, GLenum pname, GLint param)
         errorShim(GL_INVALID_ENUM);
     else if(!samplerParameterfv(s, pname, &fparam))
         errorShim(GL_INVALID_ENUM);
+    LOAD_GLES(glSamplerParameteri);
+    gles_glSamplerParameteri(s->glname, pname, param);
 }
 void gl4es_glSamplerParameterfv(GLuint sampler, GLenum pname, GLfloat *params)
 {
@@ -311,6 +320,8 @@ void gl4es_glSamplerParameterfv(GLuint sampler, GLenum pname, GLfloat *params)
     }
     if(!samplerParameterfv(s, pname, params))
         errorShim(GL_INVALID_ENUM);
+    LOAD_GLES(glSamplerParameterfv);
+    gles_glSamplerParameterfv(s->glname, pname, params);
 }
 void gl4es_glSamplerParameteriv(GLuint sampler, GLenum pname, GLint *params)
 {
@@ -326,6 +337,13 @@ void gl4es_glSamplerParameteriv(GLuint sampler, GLenum pname, GLint *params)
             fparam[i] = (params[i]>>16)*1.0f/32767.f;
     if(!samplerParameterfv(s, pname, fparam))
         errorShim(GL_INVALID_ENUM);
+    if (pname == GL_TEXTURE_BORDER_COLOR) {
+        LOAD_GLES(glSamplerParameterIiv);
+        gles_glSamplerParameterIiv(s->glname, pname, params);
+    } else {
+        LOAD_GLES(glSamplerParameteriv);
+        gles_glSamplerParameteriv(s->glname, pname, params);
+    }
 }
 void gl4es_glSamplerParameterIiv(GLuint sampler, GLenum pname, GLint *params)
 {
@@ -341,6 +359,8 @@ void gl4es_glSamplerParameterIiv(GLuint sampler, GLenum pname, GLint *params)
             fparam[i] = params[i];
     if(!samplerParameterfv(s, pname, fparam))
         errorShim(GL_INVALID_ENUM);
+    LOAD_GLES(glSamplerParameterIiv);
+    gles_glSamplerParameterIiv(s->glname, pname, params);
 }
 void gl4es_glSamplerParameterIuiv(GLuint sampler, GLenum pname, GLuint *params)
 {
@@ -356,6 +376,8 @@ void gl4es_glSamplerParameterIuiv(GLuint sampler, GLenum pname, GLuint *params)
             fparam[i] = params[i];
     if(!samplerParameterfv(s, pname, fparam))
         errorShim(GL_INVALID_ENUM);
+    LOAD_GLES(glSamplerParameterIuiv);
+    gles_glSamplerParameterIuiv(s->glname, pname, params);
 }
 
 void gl4es_glGetSamplerParameterfv(GLuint sampler, GLenum pname, GLfloat * params)
@@ -425,3 +447,18 @@ void gl4es_glGetSamplerParameterIuiv(GLuint sampler, GLenum pname, GLuint * para
             params[0] = fparams[0];
     }
 }
+
+AliasExport(void, glGenSamplers, ,(GLsizei n, GLuint *ids));
+AliasExport(void, glBindSampler, ,(GLuint unit, GLuint sampler));
+AliasExport(void, glDeleteSamplers, ,(GLsizei n, const GLuint* samplers));
+AliasExport(GLboolean, glIsSampler, ,(GLuint id));
+AliasExport(void, glSamplerParameterf, ,(GLuint sampler, GLenum pname, GLfloat param));
+AliasExport(void, glSamplerParameteri, ,(GLuint sampler, GLenum pname, GLint param));
+AliasExport(void, glSamplerParameterfv, ,(GLuint sampler, GLenum pname, GLfloat *params));
+AliasExport(void, glSamplerParameteriv, ,(GLuint sampler, GLenum pname, GLint *params));
+AliasExport(void, glSamplerParameterIiv, ,(GLuint sampler, GLenum pname, GLint *params));
+AliasExport(void, glSamplerParameterIuiv, ,(GLuint sampler, GLenum pname, GLuint *params));
+AliasExport(void, glGetSamplerParameterfv, ,(GLuint sampler, GLenum pname, GLfloat *params));
+AliasExport(void, glGetSamplerParameteriv, ,(GLuint sampler, GLenum pname, GLfloat *params));
+AliasExport(void, glGetSamplerParameterIiv, ,(GLuint sampler, GLenum pname, GLint *params));
+AliasExport(void, glGetSamplerParameterIuiv, ,(GLuint sampler, GLenum pname, GLuint *params));

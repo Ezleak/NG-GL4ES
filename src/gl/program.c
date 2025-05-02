@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <GL/gl.h>
+#include <regex.h>
 #include "../glx/hardext.h"
 #include "debug.h"
 #include "fpe.h"
@@ -10,8 +11,8 @@
 #include "glstate.h"
 #include "loader.h"
 #include "shaderconv.h"
-#include "vgpu/shaderconv.h"
 #include "fpe_shader.h"
+#include "string_utils.h"
 
 //#define DEBUG
 #ifdef DEBUG
@@ -25,304 +26,92 @@ KHASH_MAP_IMPL_INT(attribloclist, attribloc_t *);
 KHASH_MAP_IMPL_INT(uniformlist, uniform_t *);
 KHASH_MAP_IMPL_INT(programlist, program_t *);
 
-GLuint __attribute__((visibility("default"))) glGetUniformBlockIndex(GLuint program, const GLchar* name) {
-    CHECK_PROGRAM(GLuint, program);
-
-    glprogram = glprogram;
-    GLuint blockIndex = (GLuint)-1;
-
-    for (int i = 0; i < glprogram->num_uniform; i++) {
-        uniform_t* uniform = kh_value(glprogram->uniform, i);
-        if (uniform && strcmp(uniform->name, name) == 0 && uniform->builtin == 0) {
-            blockIndex = i;
-            break;
+void VISIBLE glBindFragDataLocation(GLuint program, GLuint colorNumber, const GLchar* name) {
+    DBG(SHUT_LOGD("glBindFragDataLocation(%d, %d, \"%s\")\n", program, colorNumber, name))
+    FLUSH_BEGINEND;
+    CHECK_PROGRAM(void, program)
+    if (glprogram->last_frag) {
+        if (!glprogram->last_frag->before_patch) {
+            glprogram->last_frag->before_patch = glprogram->last_frag->converted;
         }
-    }
-
-    return blockIndex;
-}
-
-void __attribute__((visibility("default"))) glGetActiveUniformBlockiv(GLuint program, GLuint uniformBlockIndex, GLenum pname, GLint* params) {
-    CHECK_PROGRAM(void, program);
-
-    glprogram = kh_value(glstate->glsl->programs, k_program);
-
-    if (uniformBlockIndex >= glprogram->num_uniform) {
-        errorShim(GL_INVALID_VALUE);
-        return;
-    }
-
-    uniform_t* uniform = kh_value(glprogram->uniform, uniformBlockIndex);
-    if (!uniform || uniform->type != GL_UNIFORM_BLOCK) {
-        errorShim(GL_INVALID_OPERATION);
-        return;
-    }
-
-    switch (pname) {
-    case GL_UNIFORM_BLOCK_BINDING:
-        *params = uniform->id;
-        break;
-
-    case GL_UNIFORM_BLOCK_DATA_SIZE:
-        *params = uniform->cache_size;
-        break;
-
-    case GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS:
-        *params = uniform->size;
-        break;
-
-    case GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES:
-        for (int i = 0; i < uniform->size; ++i) {
-            params[i] = uniform->id + i;
+        DBG(SHUT_LOGD("Target shader:\n%s\n", glprogram->last_frag->converted))
+        int len = strlen(name);
+        int tlen = len + 32;
+        char *targetPattern = malloc(sizeof(char) * tlen);
+        if (!targetPattern) {
+            DBG(fprintf(stderr, "Memory allocation failed for targetPattern\n"));
+            return;
         }
-        break;
+        sprintf(targetPattern, "out[ ]+[A-Za-z0-9 ]+[ ]+%s", name);
+        DBG(SHUT_LOGD("%s\n", targetPattern))
+        regex_t regex;
+        regmatch_t pmatch[1];
+        char *origin = NULL;
+        char *result = NULL;
 
-    case GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER:
-        *params = (uniform->builtin & 1) ? GL_TRUE : GL_FALSE;
-        break;
-
-    case GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER:
-        *params = (uniform->builtin & 2) ? GL_TRUE : GL_FALSE;
-        break;
-
-    default:
-        errorShim(GL_INVALID_ENUM);
-        return;
-    }
-}
-
-
-void __attribute__((visibility("default"))) glGetActiveUniformName(GLuint program, GLuint uniformIndex, GLsizei bufSize, GLsizei* length, GLchar* name) {
-    CHECK_PROGRAM(void, program);
-
-    glprogram = kh_value(glstate->glsl->programs, k_program);
-
-    khash_t(programlist)* programs = glstate->glsl->programs;
-    k_program = kh_get(programlist, programs, program);
-    if (k_program != kh_end(programs)) {
-        glprogram = kh_value(programs, k_program);
-    }
-
-    if (!glprogram) {
-        errorShim(GL_INVALID_OPERATION);
-        return;
-    }
-
-    khash_t(uniformlist)* uniforms = glprogram->uniform;
-    if (uniformIndex >= glprogram->num_uniform) {
-        errorShim(GL_INVALID_VALUE);
-        return;
-    }
-
-    khint_t k_uniform = kh_get(uniformlist, uniforms, uniformIndex);
-    if (k_uniform == kh_end(uniforms)) {
-        errorShim(GL_INVALID_VALUE);
-        return;
-    }
-
-    uniform_t* uniform = kh_value(uniforms, k_uniform);
-
-    if (length) {
-        *length = strlen(uniform->name);
-    }
-
-    if (name) {
-        strncpy(name, uniform->name, bufSize);
-        if (bufSize > 0) {
-            name[bufSize - 1] = '\0';
-        }
-    }
-}
-
-
-void __attribute__((visibility("default"))) glGetActiveUniformsiv(GLuint program, GLsizei uniformCount, const GLuint* uniformIndices, GLenum pname, GLint* params) {
-    CHECK_PROGRAM(void, program);
-
-    glprogram = kh_value(glstate->glsl->programs, k_program);
-
-    for (int i = 0; i < uniformCount; ++i) {
-        GLuint uniformIndex = uniformIndices[i];
-
-        if (uniformIndex >= glprogram->num_uniform) {
-            errorShim(GL_INVALID_VALUE);
+        if (regcomp(&regex, targetPattern, REG_EXTENDED) != 0) {
+            fprintf(stderr, "Failed to compile regex\n");
             return;
         }
 
-        uniform_t* uniform = kh_value(glprogram->uniform, uniformIndex);
-        if (!uniform) {
-            errorShim(GL_INVALID_OPERATION);
-            return;
-        }
+        char *searchStart = glprogram->last_frag->converted;
+        while (regexec(&regex, searchStart, 1, pmatch, 0) == 0) {
+            size_t matchLen = pmatch[0].rm_eo - pmatch[0].rm_so;
+            origin = (char *)malloc(matchLen + 1);
+            if (!origin) {
+                fprintf(stderr, "Memory allocation failed\n");
+                break;
+            }
+            strncpy(origin, searchStart + pmatch[0].rm_so, matchLen);
+            origin[matchLen] = '\0';
 
-        switch (pname) {
-        case GL_UNIFORM_TYPE:
-            params[i] = uniform->type;
-            break;
+            size_t resultLen = strlen(origin) + 30; // "layout (location = )" + colorNumber + null terminator
+            result = (char *)malloc(resultLen);
+            if (!result) {
+                fprintf(stderr, "Memory allocation failed\n");
+                free(origin);
+                break;
+            }
+            snprintf(result, resultLen, "layout (location = %d) %s", colorNumber, origin);
 
-        case GL_UNIFORM_SIZE:
-            params[i] = uniform->size;
-            break;
+            char *temp = strstr(searchStart, origin);
+            if (temp) {
+                size_t prefixLen = temp - glprogram->last_frag->converted;
+                size_t suffixLen = strlen(temp + matchLen);
+                size_t newLen = prefixLen + strlen(result) + suffixLen + 1;
 
-        case GL_UNIFORM_NAME_LENGTH:
-            params[i] = (GLint)strlen(uniform->name) + 1;
-            break;
-
-        case GL_UNIFORM_OFFSET:
-            params[i] = uniform->cache_offs;
-            break;
-
-        case GL_UNIFORM_ARRAY_STRIDE:
-            params[i] = uniform->size * sizeof(GLfloat);  // Assuming GLfloat as base type
-            break;
-
-        case GL_UNIFORM_MATRIX_STRIDE:
-            params[i] = uniform->size * sizeof(GLfloat);  // Assuming matrix elements are floats
-            break;
-
-        case GL_UNIFORM_IS_ROW_MAJOR:
-            params[i] = GL_FALSE;
-            break;
-
-        case GL_UNIFORM_ATOMIC_COUNTER_BUFFER_INDEX:
-            params[i] = -1;
-            break;
-
-        default:
-            errorShim(GL_INVALID_ENUM);
-            return;
-        }
-    }
-}
-
-
-void __attribute__((visibility("default"))) glGetActiveUniformBlockName(GLuint program, GLuint blockIndex, GLsizei bufSize, GLsizei* length, GLchar* name) {
-    CHECK_PROGRAM(void, program);
-
-    glprogram = glprogram;
-
-    if (blockIndex >= glprogram->num_uniform) {
-        errorShim(GL_INVALID_INDEX);
-        return;
-    }
-
-    uniform_t* uniform = kh_value(glprogram->uniform, blockIndex);
-    if (uniform && length) {
-        *length = strlen(uniform->name) + 1;
-    }
-
-    if (name && bufSize > 0) {
-        strncpy(name, uniform->name, bufSize - 1);
-        name[bufSize - 1] = '\0';
-    }
-}
-
-int IsActiveUniform(uniform_t* uniform) {
-    if (uniform == NULL) {
-        return 0;  
-    }
-    if (uniform->size > 0) {
-        return 1; 
-    }
-    return 0; 
-}
-
-
-void __attribute__((visibility("default"))) glGetActiveBlockiv(GLuint program, GLuint blockIndex, GLenum pname, GLint* params) {
-    CHECK_PROGRAM(void, program);
-
-    glprogram = glprogram;
-
-
-    if (blockIndex >= glprogram->num_uniform) {
-        errorShim(GL_INVALID_INDEX);
-        return;
-    }
-
-    uniform_t* uniform = kh_value(glprogram->uniform, blockIndex);
-    if (!uniform) {
-        errorShim(GL_INVALID_OPERATION);
-        return;
-    }
-
-    switch (pname) {
-    case GL_UNIFORM_BLOCK_DATA_SIZE:
-        *params = uniform->cache_size;
-        break;
-
-    case GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS:
-        *params = uniform->size;
-        break;
-
-    case GL_UNIFORM_BLOCK_BINDING:
-        *params = uniform->cache_offs;
-        break;
-
-    case GL_UNIFORM_BLOCK_NAME_LENGTH:
-        if (params) {
-            *params = strlen(uniform->name) + 1;
-        }
-        break;
-
-        {
-            GLint activeUniformCount = 0;
-            GLint* activeUniformIndices = malloc(sizeof(GLint) * uniform->size);
-
-            for (int i = 0; i < uniform->size; ++i) {
-                uniform_t* u = &glprogram->uniform[i];
-                if (u->builtin || IsActiveUniform(u)) {
-                    activeUniformIndices[activeUniformCount++] = i;
+                char *newConverted = (char *)malloc(newLen);
+                if (!newConverted) {
+                    fprintf(stderr, "Memory allocation failed\n");
+                    free(origin);
+                    free(result);
+                    break;
                 }
+
+                strncpy(newConverted, glprogram->last_frag->converted, prefixLen);
+                newConverted[prefixLen] = '\0';
+                strcat(newConverted, result);
+                strcat(newConverted, temp + matchLen);
+
+                strcpy(glprogram->last_frag->converted, newConverted);
+                free(newConverted);
             }
 
-            if (activeUniformCount > 0) {
-                memcpy(params, activeUniformIndices, sizeof(GLint) * activeUniformCount);
-            }
-            else {
-                memset(params, 0, sizeof(GLint));
-            }
+            free(origin);
+            free(result);
 
-            free(activeUniformIndices);
-            break;
+            searchStart += pmatch[0].rm_eo;
         }
-    case GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER:
-        *params = (uniform->type == GL_VERTEX_SHADER) ? GL_TRUE : GL_FALSE;
-        break;
 
-    case GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER:
-        *params = (uniform->type == GL_FRAGMENT_SHADER) ? GL_TRUE : GL_FALSE;
-        break;
-
-    default:
-        errorShim(GL_INVALID_ENUM);
-        break;
+        regfree(&regex);
+        //glprogram->last_frag->converted = gl4es_inplace_replace(glprogram->last_frag->converted, &size, target, replacement);
+        DBG(SHUT_LOGD("Resulting shader:\n%s\n", glprogram->last_frag->converted))
+        glprogram->frag_data_changed = 1;
     }
-}
-void __attribute__((visibility("default"))) glUniformBlockBinding(GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding) {
-    CHECK_PROGRAM(void, program);
-
-    glprogram = glprogram;
-
-    if (uniformBlockIndex >= glprogram->num_uniform) {
-        errorShim(GL_INVALID_INDEX);
-        return;
-    }
-
-    uniform_t* uniform = kh_value(glprogram->uniform, uniformBlockIndex);
-    if (!uniform) {
-        errorShim(GL_INVALID_OPERATION);
-        return;
-    }
-
-    uniform->cache_offs = uniformBlockBinding;
-}
-
-
-void __attribute__((visibility("default"))) glBindFragDataLocation(GLuint program, GLuint colorNumber, const GLchar* name) {
-    if (!program) {
+    /*if (!program) {
         noerrorShim();
         return;
     }
-
     program_t* glprogram = NULL;
     khint_t k_program;
     {
@@ -333,18 +122,15 @@ void __attribute__((visibility("default"))) glBindFragDataLocation(GLuint progra
             glprogram = kh_value(programs, k_program);
         }
     }
-
     if (!glprogram) {
         errorShim(GL_INVALID_OPERATION);
         return;
     }
-
     shader_t* frag_shader = glprogram->last_frag;
     if (!frag_shader) {
         errorShim(GL_INVALID_OPERATION);
         return;
     }
-
     GLint location = -1;
     for (int i = 0; i < glprogram->num_uniform; i++) {
         uniform_t* uniform = &glprogram->uniform[i];
@@ -353,14 +139,11 @@ void __attribute__((visibility("default"))) glBindFragDataLocation(GLuint progra
             break;
         }
     }
-
     if (location == -1) {
         errorShim(GL_INVALID_OPERATION);
         return;
     }
-
     khash_t(attribloclist)* attribloc = glprogram->attribloc;
-
     khint_t k = kh_get(attribloclist, attribloc, colorNumber);
     if (k == kh_end(attribloc)) {
         attribloc_t* new_attribloc = (attribloc_t*)malloc(sizeof(attribloc_t));
@@ -375,23 +158,19 @@ void __attribute__((visibility("default"))) glBindFragDataLocation(GLuint progra
         existing_attribloc->real_index = location;
         existing_attribloc->name = strdup(name);
     }
-
     glprogram->linked = 1;
-    noerrorShim();
+    noerrorShim();*/
 }
-
 void merge_uniforms(uniforms_declarations uniforms1, uniforms_declarations uniforms2) {
     int i = 0, j = 0;
-
-    // 找到第一个空的位置（即 initial_value == NULL）
+    // 业一盏位茫 initial_value == NULL
     while (i < MAX_UNIFORM_VARIABLE_NUMBER && uniforms1[i].initial_value[0] != '\0') {
-        i++;  // 跳过已初始化的元素
+        i++;  // 殉始元
     }
-
-    // 从第一个空的位置开始，将 uniforms_declarations2 中的数据复制过去
+    // 拥一盏位每始 uniforms_declarations2 械莞乒去
     while (i < MAX_UNIFORM_VARIABLE_NUMBER && j < MAX_UNIFORM_VARIABLE_NUMBER) {
-        // 复制 uniforms_declarations2 中的元素到 uniforms_declarations1 中
-        if (uniforms2[j].initial_value[0] != '\0') {  // 只复制非空的元素
+        //  uniforms_declarations2 械元氐 uniforms_declarations1
+        if (uniforms2[j].initial_value[0] != '\0') {  // 只品强盏元
             strncpy(uniforms1[i].variable, uniforms2[j].variable, MAX_VARIABLE_LENGTH);
             strncpy(uniforms1[i].initial_value, uniforms2[j].initial_value, MAX_INITIAL_VALUE_LENGTH);
             i++;
@@ -400,8 +179,8 @@ void merge_uniforms(uniforms_declarations uniforms1, uniforms_declarations unifo
     }
 }
 
-void gl4es_glAttachShader(GLuint program, GLuint shader) {
-    DBG(SHUT_LOGD("glAttachShader(%d, %d)\n", program, shader);)
+void APIENTRY_GL4ES gl4es_glAttachShader(GLuint program, GLuint shader) {
+    DBG(SHUT_LOGD("glAttachShader(%d, %d)\n", program, shader))
     FLUSH_BEGINEND;
     // sanity tests
     CHECK_PROGRAM(void, program)
@@ -419,7 +198,7 @@ void gl4es_glAttachShader(GLuint program, GLuint shader) {
         glprogram->last_vert = glshader;
     else if(glshader->type==GL_FRAGMENT_SHADER && !glprogram->last_frag)
         glprogram->last_frag = glshader;
-    // merge uniforms_declarations
+	// merge uniforms_declarations
     merge_uniforms(glprogram->declarations, glshader->uniforms_declarations);
     // send to hadware
     LOAD_GLES2(glAttachShader);
@@ -430,8 +209,8 @@ void gl4es_glAttachShader(GLuint program, GLuint shader) {
         noerrorShim();
 }
 
-void gl4es_glBindAttribLocation(GLuint program, GLuint index, const GLchar *name) {
-    DBG(SHUT_LOGD("glBindAttribLocation(%d, %d, \"%s\")\n", program, index, name);)
+void APIENTRY_GL4ES gl4es_glBindAttribLocation(GLuint program, GLuint index, const GLchar *name) {
+    DBG(SHUT_LOGD("glBindAttribLocation(%d, %d, \"%s\")\n", program, index, name))
     FLUSH_BEGINEND;
     // sanity tests
     CHECK_PROGRAM(void, program)
@@ -465,8 +244,8 @@ void gl4es_glBindAttribLocation(GLuint program, GLuint index, const GLchar *name
         noerrorShim();
 }
 
-GLuint gl4es_glCreateProgram(void) {
-    DBG(SHUT_LOGD("glCreateProgram()\n");)
+GLuint APIENTRY_GL4ES gl4es_glCreateProgram(void) {
+    DBG(SHUT_LOGD("glCreateProgram()\n"))
     FLUSH_BEGINEND;
     static GLuint lastprogram = 0;
     GLuint program;
@@ -512,8 +291,8 @@ GLuint gl4es_glCreateProgram(void) {
     return program;
 }
 
-void actualy_deleteshader(GLuint shader);
-void actualy_detachshader(GLuint shader);
+void actually_deleteshader(GLuint shader);
+void actually_detachshader(GLuint shader);
 
 void deleteProgram(program_t *glprogram, khint_t k_program) {
     free(glprogram->attach);
@@ -546,8 +325,8 @@ void deleteProgram(program_t *glprogram, khint_t k_program) {
     free(glprogram);
 }
 
-void gl4es_glDeleteProgram(GLuint program) {
-    DBG(SHUT_LOGD("glDeleteProgram(%d)\n", program);)
+void APIENTRY_GL4ES gl4es_glDeleteProgram(GLuint program) {
+    DBG(SHUT_LOGD("glDeleteProgram(%d)\n", program))
     if(!glstate) return;    // in case a program delete shaders after deleteing all context
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
@@ -561,13 +340,13 @@ void gl4es_glDeleteProgram(GLuint program) {
     // TODO: check GL ERROR to not clean in case of error?
     // clean attached shaders
     for (int i=0; i<glprogram->attach_size; i++) {
-        actualy_detachshader(glprogram->attach[i]); // auto delete if marqued as delete!
+        actually_detachshader(glprogram->attach[i]); // auto delete if marked as delete!
     }
     deleteProgram(glprogram, k_program);
 }
 
-void gl4es_glDetachShader(GLuint program, GLuint shader) {
-    DBG(SHUT_LOGD("glDetachShader(%d, %d)\n", program, shader);)
+void APIENTRY_GL4ES gl4es_glDetachShader(GLuint program, GLuint shader) {
+    DBG(SHUT_LOGD("glDetachShader(%d, %d)\n", program, shader))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
     CHECK_SHADER(void, shader)
@@ -588,16 +367,15 @@ void gl4es_glDetachShader(GLuint program, GLuint shader) {
     } else
         noerrorShim();
     // marked as detached
-    actualy_detachshader(shader);
+    actually_detachshader(shader);
 }
 
-void gl4es_glGetActiveAttrib(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name) {
-    DBG(SHUT_LOGD("glGetActiveAttrib(%d, %d, %d, %p, %p, %p, %p)\n", program, index, bufSize, length, size, type, name);)
+void APIENTRY_GL4ES gl4es_glGetActiveAttrib(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name) {
+    DBG(SHUT_LOGD("glGetActiveAttrib(%d, %d, %d, %p, %p, %p, %p)\n", program, index, bufSize, length, size, type, name))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
 
     if(glprogram->attribloc) {
-        khint_t k;
         attribloc_t *attribloc;
         kh_foreach_value(glprogram->attribloc, attribloc,
             if(attribloc->real_index == index) {
@@ -608,18 +386,18 @@ void gl4es_glGetActiveAttrib(GLuint program, GLuint index, GLsizei bufSize, GLsi
                     strncpy(name, attribloc->glname, bufSize-1);
                     name[bufSize-1] = '\0';
                 }
-                DBG(SHUT_LOGD("found, type=%s, size=%d, name=%s/%s\n", PrintEnum(attribloc->type), attribloc->size, attribloc->name, attribloc->glname);)
+                DBG(SHUT_LOGD("found, type=%s, size=%d, name=%s/%s\n", PrintEnum(attribloc->type), attribloc->size, attribloc->name, attribloc->glname))
                 noerrorShim();
                 return;
             }
         );
     }
-    DBG(SHUT_LOGD("not found\n");)
-    errorShim(GL_INVALID_VALUE);    
+    DBG(SHUT_LOGD("not found\n"))
+    errorShim(GL_INVALID_VALUE);
 }
 
-void gl4es_glGetAttachedShaders(GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders) {
-    DBG(SHUT_LOGD("glGetAttachedShaders(%d, %d, %p, %p)\n", program, maxCount, count, shaders);)
+void APIENTRY_GL4ES gl4es_glGetAttachedShaders(GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders) {
+    DBG(SHUT_LOGD("glGetAttachedShaders(%d, %d, %p, %p)\n", program, maxCount, count, shaders))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
 
@@ -634,7 +412,7 @@ void gl4es_glGetAttachedShaders(GLuint program, GLsizei maxCount, GLsizei *count
     noerrorShim();
 }
 
-GLint gl4es_glGetAttribLocation(GLuint program, const GLchar *name) {
+GLint APIENTRY_GL4ES gl4es_glGetAttribLocation(GLuint program, const GLchar *name) {
     DBG(SHUT_LOGD("glGetAttribLocation(%d, %s)\n", program, name));
     FLUSH_BEGINEND;
     CHECK_PROGRAM(GLint, program);
@@ -664,34 +442,33 @@ GLint gl4es_glGetAttribLocation(GLuint program, const GLchar *name) {
     }
     // if found, just return the value, it's done...
     if(loc!=-1) {
-        DBG(SHUT_LOGD(" found in cache: %d\n", loc);)
+        DBG(SHUT_LOGD(" found in cache: %d\n", loc))
         return loc;
     }
     // end
-    DBG(SHUT_LOGD(" asked hardware: %d\n", loc);)
+    DBG(SHUT_LOGD(" asked hardware: %d\n", loc))
     return loc;
 }
 
-void gl4es_glGetActiveUniform(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name) {
-    DBG(SHUT_LOGD("glGetActiveUniform(%d, %d, %d, %p, %p, %p, %p)\n", program, index, bufSize, length, size, type, name);)
+void APIENTRY_GL4ES gl4es_glGetActiveUniform(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name) {
+    DBG(SHUT_LOGD("glGetActiveUniform(%d, %d, %d, %p, %p, %p, %p)\n", program, index, bufSize, length, size, type, name))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(GLvoid, program);
 
     if(!glprogram->linked) {
         errorShim(GL_INVALID_OPERATION);
-        DBG(SHUT_LOGD(" not linked\n");)
+        DBG(SHUT_LOGD(" not linked\n"))
         return;
     }
     noerrorShim();
     if(strncmp(name, "gl_", 3)==0) {
-        DBG(SHUT_LOGD(" internal uniform\n");)
+        DBG(SHUT_LOGD(" internal uniform\n"))
         return;
     }
 
     // look in uniform cache, that is filled when program is linked
     if(glprogram->uniform) {
         uniform_t *m;
-        khint_t k;
         kh_foreach_value(glprogram->uniform, m,
             if(m->internal_id == index) {
                 if(type) *type = m->type;
@@ -701,13 +478,13 @@ void gl4es_glGetActiveUniform(GLuint program, GLuint index, GLsizei bufSize, GLs
                     strncpy(name, m->name, bufSize-1);
                     name[bufSize-1] = '\0';
                 }
-                DBG(SHUT_LOGD(" found %s (%d), type=%s, size=%d\n", m->name, strlen(m->name), PrintEnum(m->type), m->size);)
+                DBG(SHUT_LOGD(" found %s (%zd), type=%s, size=%d\n", m->name, strlen(m->name), PrintEnum(m->type), m->size))
                 return;
             }
         );
     }
     // end
-    DBG(SHUT_LOGD(" not found\n");)
+    DBG(SHUT_LOGD(" not found\n"))
     errorShim(GL_INVALID_VALUE);
 }
 
@@ -718,8 +495,8 @@ const char* getFakeProgramInfo(program_t* glprogram) {
     return (glprogram->linked)?((glprogram->validated)?validated:linked):notlinked;
 }
 
-void gl4es_glGetProgramInfoLog(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog) {
-    DBG(SHUT_LOGD("glGetProgramInfoLog(%d, %d, %p, %p)\n", program, maxLength, length, infoLog);)
+void APIENTRY_GL4ES gl4es_glGetProgramInfoLog(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog) {
+    DBG(SHUT_LOGD("glGetProgramInfoLog(%d, %d, %p, %p)\n", program, maxLength, length, infoLog))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
 
@@ -746,8 +523,8 @@ void gl4es_glGetProgramInfoLog(GLuint program, GLsizei maxLength, GLsizei *lengt
     }
 }
 
-void gl4es_glGetProgramiv(GLuint program, GLenum pname, GLint *params) {
-    DBG(SHUT_LOGD("glGetProgramiv(%d, %s, %p)\n", program, PrintEnum(pname), params);)
+void APIENTRY_GL4ES gl4es_glGetProgramiv(GLuint program, GLenum pname, GLint *params) {
+    DBG(SHUT_LOGD("glGetProgramiv(%d, %s, %p)\n", program, PrintEnum(pname), params))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
 
@@ -807,7 +584,7 @@ void gl4es_glGetProgramiv(GLuint program, GLenum pname, GLint *params) {
             } else
                 errorShim(GL_INVALID_ENUM);
             break;
-            
+
         default:
             if(gles_glGetProgramiv) {
                 gles_glGetProgramiv(glprogram->id, pname, params);
@@ -818,15 +595,15 @@ void gl4es_glGetProgramiv(GLuint program, GLenum pname, GLint *params) {
     }
 }
 
-GLint gl4es_glGetUniformLocation(GLuint program, const GLchar *name) {
-    DBG(SHUT_LOGD("glGetUniformLocation(%d, %s)\n", program, name);)
+GLint APIENTRY_GL4ES gl4es_glGetUniformLocation(GLuint program, const GLchar *name) {
+    DBG(SHUT_LOGD("glGetUniformLocation(%d, %s)\n", program, name))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(GLint, program)
 
     noerrorShim();
     int res = -1;
     if(strncmp(name, "gl_", 3)==0) {
-        DBG(SHUT_LOGD(" internal uniform: -1\n");)
+        DBG(SHUT_LOGD(" internal uniform: -1\n"))
         return res;
     }
 
@@ -843,7 +620,6 @@ GLint gl4es_glGetUniformLocation(GLuint program, const GLchar *name) {
     }
     if(glprogram->uniform) {
         uniform_t *m;
-        khint_t k;
         kh_foreach_value(glprogram->uniform, m,
             if(strlen(m->name)==l && strncmp(m->name, name, l)==0) {
                 res = m->id;
@@ -855,12 +631,12 @@ GLint gl4es_glGetUniformLocation(GLuint program, const GLchar *name) {
             }
         )
     }
-    DBG(SHUT_LOGD(" location: %d\n", res);)
+    DBG(SHUT_LOGD(" location: %d\n", res))
     return res;
 }
 
-GLboolean gl4es_glIsProgram(GLuint program) {
-    DBG(SHUT_LOGD("glIsProgram(%d)\n", program);)
+GLboolean APIENTRY_GL4ES gl4es_glIsProgram(GLuint program) {
+    DBG(SHUT_LOGD("glIsProgram(%d)\n", program))
     FLUSH_BEGINEND;
     noerrorShim();
     if(!program) {
@@ -868,7 +644,6 @@ GLboolean gl4es_glIsProgram(GLuint program) {
     }
     program_t *glprogram = NULL;
     khint_t k;
-    int ret;
     khash_t(programlist) *programs = glstate->glsl->programs;
     k = kh_get(programlist, programs, program);
     if (k != kh_end(programs))
@@ -882,7 +657,7 @@ static void clear_program(program_t *glprogram)
     if(glprogram->attribloc) {
         attribloc_t *m;
         khint_t k;
-        khint_t ret;
+        int ret;
         //attribloc->glname must not be freed
         kh_foreach(glprogram->attribloc, k, m,
             free(m->name); free(m);
@@ -918,7 +693,7 @@ static void fill_program(program_t *glprogram)
     int maxsize=0;
     khint_t k;
     int ret;
-    DBG(GLenum e2;)
+    DBG(GLenum e2);
 
     // init bluitin emulation first
     builtin_Init(glprogram);
@@ -934,7 +709,7 @@ static void fill_program(program_t *glprogram)
     int tu_idx = 0;
     for (int i=0; i<n; i++) {
         gles_glGetActiveUniform(glprogram->id, i, maxsize, NULL, &size, &type, name);
-        DBG(e2=gles_glGetError();)
+        DBG(e2=gles_glGetError());
         DBG(if(e2==GL_NO_ERROR))
         {
             // remove any ending "[]" that could be present
@@ -969,14 +744,20 @@ static void fill_program(program_t *glprogram)
                         glprogram->texunits[tu_idx].req_tu = glprogram->texunits[tu_idx].act_tu = 0;
                         ++tu_idx;
                     }
-                    DBG(SHUT_LOGD(" uniform #%d : \"%s\"%s type=%s size=%d\n", id, gluniform->name, gluniform->builtin?" (builtin) ":"", PrintEnum(gluniform->type), gluniform->size);)
+                    else if (type==GL_SAMPLER_2D_SHADOW) {
+                        glprogram->texunits[tu_idx].id = id;
+                        glprogram->texunits[tu_idx].type=TU_TEX2DSH;
+                        glprogram->texunits[tu_idx].req_tu = glprogram->texunits[tu_idx].act_tu = 0;
+                        ++tu_idx;
+                    }
+                    DBG(SHUT_LOGD(" uniform #%d : \"%s\"%s type=%s size=%d\n", id, gluniform->name, gluniform->builtin?" (builtin) ":"", PrintEnum(gluniform->type), gluniform->size))
                     if(gluniform->size==1) ++glprogram->num_uniform;
                     id++;
                 }
                 uniform_cache += uniformsize(type)*size;
             }
         }
-        DBG(else printf("LIBGL: Warning, getting Uniform #%d info failed with %s\n", i, PrintEnum(e2));)
+        DBG(else SHUT_LOGD("LIBGL: Warning, getting Uniform #%d info failed with %s\n", i, PrintEnum(e2)))
     }
     free(name);
     // reset uniform cache
@@ -990,8 +771,8 @@ static void fill_program(program_t *glprogram)
         uniform_t *m;
         khint_t k;
         kh_foreach(glprogram->uniform, k, m,
-            if(m->type == GL_SAMPLER_2D || m->type == GL_SAMPLER_CUBE)
-                memset(glprogram->cache.cache+m->cache_offs, 0xff, m->cache_size);
+            if(m->type == GL_SAMPLER_2D || m->type == GL_SAMPLER_CUBE || m->type == GL_SAMPLER_2D_SHADOW)
+                memset((char*)glprogram->cache.cache+m->cache_offs, 0xff, m->cache_size);
         )
     }
 
@@ -1000,7 +781,7 @@ static void fill_program(program_t *glprogram)
     gles_glGetProgramiv(glprogram->id, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH, &maxsize);
     name = (char*)malloc(maxsize);
     for (int i=0; i<n; i++) {
-        DBG(e2=gles_glGetError();)
+        DBG(e2=gles_glGetError());
         DBG(if(e2==GL_NO_ERROR))
         {
             gles_glGetActiveAttrib(glprogram->id, i, maxsize, NULL, &size, &type, name);
@@ -1025,10 +806,10 @@ static void fill_program(program_t *glprogram)
                 glattribloc->real_index = i;
                 int builtin = builtin_CheckVertexAttrib(glprogram, name, id);
                 glprogram->va_size[id] = n_uniform(type); // same as uniform
-                DBG(SHUT_LOGD(" attrib #%d : \"%s\"%s type=%s size=%d\n", id, glattribloc->name, builtin?" (builtin) ":"", PrintEnum(glattribloc->type), glattribloc->size);)
+                DBG(SHUT_LOGD(" attrib #%d : \"%s\"%s type=%s size=%d\n", id, glattribloc->name, builtin?" (builtin) ":"", PrintEnum(glattribloc->type), glattribloc->size))
             }
         }
-        DBG(else printf("LIBGL: Warning, getting Attrib #%d info failed with %s\n", i, PrintEnum(e2));)
+        DBG(else SHUT_LOGD("LIBGL: Warning, getting Attrib #%d info failed with %s\n", i, PrintEnum(e2)))
     }
     free(name);
 }
@@ -1037,7 +818,7 @@ int gl4es_useProgramBinary(GLuint program, int length, GLenum format, const void
 {
     if(hardext.prgbin_n==0)
         return 0;
-    DBG(SHUT_LOGD("useProgramBinary(%d, %d, %d, %p)\n", program, length, format, binary);)
+    DBG(SHUT_LOGD("useProgramBinary(%d, %d, %d, %p)\n", program, length, format, binary))
     CHECK_PROGRAM(int, program)
     noerrorShim();
 
@@ -1049,12 +830,12 @@ int gl4es_useProgramBinary(GLuint program, int length, GLenum format, const void
     gles_glProgramBinary(glprogram->id, format, binary, length);
 
     gles_glGetProgramiv(glprogram->id, GL_LINK_STATUS, &glprogram->linked);
-    DBG(SHUT_LOGD(" link status = %d\n", glprogram->linked);)
+    DBG(SHUT_LOGD(" link status = %d\n", glprogram->linked))
     if(glprogram->linked) {
         fill_program(glprogram);
     } else {
         // should DBG the linker error?
-        DBG(SHUT_LOGD(" Load failed!\n");)
+        DBG(SHUT_LOGD(" Load failed!\n"))
         glprogram->linked = 0;
         errorGL();
     }
@@ -1065,7 +846,7 @@ int gl4es_getProgramBinary(GLuint program, int *length, GLenum *format, void** b
 {
     if(hardext.prgbin_n==0)
         return 0;
-    DBG(SHUT_LOGD("getProgramBinary(%d, %p, %p, %p)\n", program, length, format, binary);)
+    DBG(SHUT_LOGD("getProgramBinary(%d, %p, %p, %p)\n", program, length, format, binary))
     CHECK_PROGRAM(int, program)
     noerrorShim();
 
@@ -1083,34 +864,34 @@ int gl4es_getProgramBinary(GLuint program, int *length, GLenum *format, void** b
     return (*length);
 }
 
-void gl4es_glGetProgramBinary(GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, void *binary)
+void APIENTRY_GL4ES gl4es_glGetProgramBinary(GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, void *binary)
 {
     if(hardext.prgbin_n==0) {
         errorShim(GL_INVALID_OPERATION);
         return;
     }
-    DBG(SHUT_LOGD("glGetProgramBinary(%d, %d, %p, %p, %p)\n", program, bufSize, length, binaryFormat, binary);)
+    DBG(SHUT_LOGD("glGetProgramBinary(%d, %d, %p, %p, %p)\n", program, bufSize, length, binaryFormat, binary))
     CHECK_PROGRAM(void, program)
     LOAD_GLES_OES(glGetProgramBinary);
     gles_glGetProgramBinary(glprogram->id, bufSize, length, binaryFormat, binary);
     errorGL();
 }
 
-void gl4es_glProgramBinary(GLuint program, GLenum binaryFormat, const void *binary, GLsizei length)
+void APIENTRY_GL4ES gl4es_glProgramBinary(GLuint program, GLenum binaryFormat, const void *binary, GLsizei length)
 {
     if(hardext.prgbin_n==0) {
         errorShim(GL_INVALID_OPERATION);
         return;
     }
-    DBG(SHUT_LOGD("glProgramBinary(%d, %d, %p, %d)\n", program, binaryFormat, binary, length);)
+    DBG(SHUT_LOGD("glProgramBinary(%d, %d, %p, %d)\n", program, binaryFormat, binary, length))
     if(gl4es_useProgramBinary(program, length, binaryFormat, binary))
         noerrorShim();
     else
         errorShim(GL_INVALID_OPERATION);
 }
 
-void gl4es_glLinkProgram(GLuint program) {
-    DBG(SHUT_LOGD("glLinkProgram(%d)\n", program);)
+void APIENTRY_GL4ES gl4es_glLinkProgram(GLuint program) {
+    DBG(SHUT_LOGD("glLinkProgram(%d)\n", program))
     FLUSH_BEGINEND;
     CHECK_PROGRAM(void, program)
     noerrorShim();
@@ -1121,14 +902,12 @@ void gl4es_glLinkProgram(GLuint program) {
     shaderconv_need_t needs = {0};
     needs.need_texcoord = -1;
     // first get the compatible need
-    for (int i=0; i<glprogram->attach_size; i++) {
+    for (int i = 0; i < glprogram->attach_size; i++) {
         accumShaderNeeds(glprogram->attach[i], &needs);
     }
-    // now check if vertex shader is missing
-    int has_vertex = glprogram->last_vert?1:0;
-    // and create one if needed!
-    if(!has_vertex) {
-        glprogram->default_need = (shaderconv_need_t*)malloc(sizeof(shaderconv_need_t));
+    // create one vertex shader if needed!
+    if (!glprogram->last_vert) {
+        glprogram->default_need = (shaderconv_need_t *) malloc(sizeof(shaderconv_need_t));
         memcpy(glprogram->default_need, &needs, sizeof(shaderconv_need_t));
         glprogram->default_vertex = 1;
         GLenum vtx = gl4es_glCreateShader(GL_VERTEX_SHADER);
@@ -1136,64 +915,108 @@ void gl4es_glLinkProgram(GLuint program) {
         gl4es_glCompileShader(vtx);
         gl4es_glAttachShader(glprogram->id, vtx);
     }
+    // create one fragment shader if needed!
+    if (!glprogram->last_frag) {
+        glprogram->default_need = (shaderconv_need_t *) malloc(sizeof(shaderconv_need_t));
+        memcpy(glprogram->default_need, &needs, sizeof(shaderconv_need_t));
+        glprogram->default_fragment = 1;
+        GLenum vtx = gl4es_glCreateShader(GL_FRAGMENT_SHADER);
+        gl4es_glShaderSource(vtx, 1, fpe_FragmentShader(&needs, NULL), NULL);
+        gl4es_glCompileShader(vtx);
+        gl4es_glAttachShader(glprogram->id, vtx);
+    }
     int compatible = 1;
     // now is everyone ok?
-    for (int i=0; i<glprogram->attach_size && compatible; i++) {
+    for (int i = 0; i < glprogram->attach_size && compatible; i++) {
         compatible = isShaderCompatible(glprogram->attach[i], &needs);
     }
     // someone is not compatible, redoing shaders...
-    if(!compatible) {
-        DBG(SHUT_LOGD("Need to redo some shaders...\n");)
-        for (int i=0; i<glprogram->attach_size; i++) {
+    if (!compatible) {
+        DBG(SHUT_LOGD("Need to redo some shaders...\n"))
+        for (int i = 0; i < glprogram->attach_size; i++) {
             redoShader(glprogram->attach[i], &needs);
         }
     }
     // check if Built-in VA are used, and if so, bind them to their proper location
-    if(glprogram->last_vert)
-        for (int i=0; i<ATT_MAX; ++i) {
-            const char* attribute = hasBuiltinAttrib(glprogram->last_vert->converted, i);
-            if(attribute)
+
+    if (glprogram->last_vert && !glprogram->last_vert->is_converted_essl_320) {
+        for (int i = 0; i < ATT_MAX; ++i) {
+            const char *attribute = hasBuiltinAttrib(glprogram->last_vert->converted, i);
+            if (attribute)
                 gl4es_glBindAttribLocation(glprogram->id, i, attribute);
         }
+    }
+    // for glBindFragDataLocation
+    if (glprogram->last_vert && glprogram->frag_data_changed == 1) {
+        LOAD_GLES2(glShaderSource);
+        LOAD_GLES2(glCompileShader);
+        LOAD_GLES2(glAttachShader);
+        if (gles_glShaderSource && gles_glCompileShader && gles_glAttachShader) {
+            gles_glShaderSource(glprogram->last_frag->id, 1,
+                                (const GLchar *const *) &glprogram->last_frag->converted, NULL);
+            gles_glCompileShader(glprogram->last_frag->id);
+            LOAD_GLES2(glGetShaderiv);
+            GLint status = 0;
+            gles_glGetShaderiv(glprogram->last_frag->id, GL_COMPILE_STATUS, &status);
+            if (status != GL_TRUE) {
+                DBG(
+                        char tmp[500];
+                        GLint length;
+                        LOAD_GLES2(glGetShaderInfoLog);
+                        gles_glGetShaderInfoLog(glprogram->last_frag->id, 500, &length, tmp);
+                        SHUT_LOGD("Failed to compile patched shader, using default shader, log:\n%s\n",
+                               tmp);
+                )
+                gles_glShaderSource(glprogram->last_frag->id, 1,
+                                    (const GLchar *const *) &glprogram->last_frag->before_patch,
+                                    NULL);
+                gles_glCompileShader(glprogram->last_frag->id);
+            }
+            gles_glAttachShader(glprogram->id, glprogram->last_frag->id);
+        } else {
+            noerrorShim();
+        }
+    }
     // ok, continue with linking
     LOAD_GLES2(glLinkProgram);
-    if(gles_glLinkProgram) {
+    if (gles_glLinkProgram) {
         LOAD_GLES(glGetError);
         LOAD_GLES2(glGetProgramiv);
         gles_glLinkProgram(glprogram->id);
         GLenum err = gles_glGetError();
         // Get Link Status
         gles_glGetProgramiv(glprogram->id, GL_LINK_STATUS, &glprogram->linked);
-        DBG(SHUT_LOGD(" link status = %d\n", glprogram->linked);)
-        if(glprogram->linked) {
+        DBG(SHUT_LOGD(" link status = %d\n", glprogram->linked))
+        if (glprogram->linked) {
+            set_uniforms_default_value(program, glprogram->declarations,
+                                       MAX_UNIFORM_VARIABLE_NUMBER);
             fill_program(glprogram);
-            set_uniforms_default_value(program, glprogram->declarations, MAX_UNIFORM_VARIABLE_NUMBER);
+            noerrorShimNoPurge();
         } else {
             GLsizei log_length;
             gles_glGetProgramiv(glprogram->id, GL_INFO_LOG_LENGTH, &log_length);
             DBG(SHUT_LOGD("Linker error length: %i\n", log_length));
-            if(log_length != 0) {
-               LOAD_GLES2(glGetProgramInfoLog);
-               GLchar log_chars[log_length];
-               gles_glGetProgramInfoLog(glprogram->id, log_length, &log_length, log_chars);
-               printf("%s\n", log_chars);
+            if (log_length != 0) {
+                LOAD_GLES2(glGetProgramInfoLog);
+                GLchar log_chars[log_length];
+                gles_glGetProgramInfoLog(glprogram->id, log_length, &log_length, log_chars);
+                SHUT_LOGD("%s", log_chars);
             }
             // should DBG the linker error?
-            DBG(SHUT_LOGD(" Link failled!\n");)
+            DBG(SHUT_LOGD(" Link failled!\n"))
             glprogram->linked = 0;
-            errorGL();
+            errorShim(err);
             return;
         }
-        // all done
-        errorShim(err);
+
     } else {
         noerrorShim();
     }
     glprogram->linked = 1;
 }
 
-void gl4es_glUseProgram(GLuint program) {
-    DBG(SHUT_LOGD("glUseProgram(%d) old=%d\n", program, glstate->glsl->program);)
+void APIENTRY_GL4ES gl4es_glUseProgram(GLuint program) {
+    DBG(SHUT_LOGD("glUseProgram(%d) old=%d\n", program, glstate->glsl->program))
     PUSH_IF_COMPILING(glUseProgram);
     if(program==0) {
         glstate->glsl->program=0;
@@ -1202,13 +1025,13 @@ void gl4es_glUseProgram(GLuint program) {
     }
     CHECK_PROGRAM(void, program)
     noerrorShim();
-    DBG(SHUT_LOGD("program id=%d\n", glprogram->id);)
+    DBG(SHUT_LOGD("program id=%d\n", glprogram->id))
 
     glstate->glsl->program=glprogram->id;
     glstate->glsl->glprogram=glprogram;
 }
 
-void gl4es_glValidateProgram(GLuint program) {
+void APIENTRY_GL4ES gl4es_glValidateProgram(GLuint program) {
     CHECK_PROGRAM(void, program)
     FLUSH_BEGINEND;
     noerrorShim();
@@ -1219,7 +1042,7 @@ void gl4es_glValidateProgram(GLuint program) {
         LOAD_GLES2(glGetProgramiv);
         gles_glValidateProgram(glprogram->id);
         GLenum err = gles_glGetError();
-        gles_glGetProgramiv(glprogram->id, GL_VALIDATE_STATUS, &glprogram->valid_result);
+        gles_glGetProgramiv(glprogram->id, GL_VALIDATE_STATUS, (GLint *) &glprogram->valid_result);
         errorShim(err);
         // TODO: grab all Uniform and Attrib of the program
     } else {
@@ -1228,44 +1051,15 @@ void gl4es_glValidateProgram(GLuint program) {
     glprogram->validated = 1;
 }
 
-
-void glAttachShader(GLuint program, GLuint shader) AliasExport("gl4es_glAttachShader");
-void glBindAttribLocation(GLuint program, GLuint index, const GLchar *name) AliasExport("gl4es_glBindAttribLocation");
-GLuint glCreateProgram(void) AliasExport("gl4es_glCreateProgram");
-void glDeleteProgram(GLuint program) AliasExport("gl4es_glDeleteProgram");
-void glDetachShader(GLuint program, GLuint shader) AliasExport("gl4es_glDetachShader");
-void glGetActiveAttrib(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name) AliasExport("gl4es_glGetActiveAttrib");
-void glGetAttachedShaders(GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders) AliasExport("gl4es_glGetAttachedShaders");
-GLint glGetAttribLocation(GLuint program, const GLchar *name) AliasExport("gl4es_glGetAttribLocation");
-void glGetActiveUniform(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name) AliasExport("gl4es_glGetActiveUniform");void glGetProgramInfoLog(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog) AliasExport("gl4es_glGetProgramInfoLog");
-void glGetProgramiv(GLuint program, GLenum pname, GLint *params) AliasExport("gl4es_glGetProgramiv");
-GLint glGetUniformLocation(GLuint program, const GLchar *name) AliasExport("gl4es_glGetUniformLocation");
-GLboolean glIsProgram(GLuint program) AliasExport("gl4es_glIsProgram");
-void glLinkProgram(GLuint program) AliasExport("gl4es_glLinkProgram");
-void glUseProgram(GLuint program) AliasExport("gl4es_glUseProgram");
-void glValidateProgram(GLuint program) AliasExport("gl4es_glValidateProgram");
-
-void glGetProgramBinary(GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, void *binary) AliasExport("gl4es_glGetProgramBinary");
-void glProgramBinary(GLuint program, GLenum binaryFormat, const void *binary, GLsizei length) AliasExport("gl4es_glProgramBinary");
-
-
-// ================ GL_ARB_vertex_shader =================
-GLvoid glBindAttribLocationARB(GLhandleARB programObj, GLuint index, const GLcharARB *name) AliasExport("gl4es_glBindAttribLocation");
-
-GLvoid glGetActiveAttribARB(GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name) AliasExport("gl4es_glGetActiveAttrib");
-
-GLint glGetAttribLocationARB(GLhandleARB programObj, const GLcharARB *name) AliasExport("gl4es_glGetAttribLocation");
-
 // ============== GL_ARB_shader_objects ==================
 // some are not simple alias but wrappers
-GLvoid gl4es_glDeleteObject(GLhandleARB obj) {
+GLvoid APIENTRY_GL4ES gl4es_glDeleteObject(GLhandleARB obj) {
     if(!obj)
         return;
     // find type of obj (shader or program)
     program_t *glprogram = NULL;
     khint_t k_program;
     {
-        int ret;
         khash_t(programlist) *programs = glstate->glsl->programs;
         k_program = kh_get(programlist, programs, obj);
         if (k_program != kh_end(programs))
@@ -1277,7 +1071,7 @@ GLvoid gl4es_glDeleteObject(GLhandleARB obj) {
         gl4es_glDeleteShader(obj);
 }
 
-GLhandleARB gl4es_glGetHandle(GLenum pname) {
+GLhandleARB APIENTRY_GL4ES gl4es_glGetHandle(GLenum pname) {
     FLUSH_BEGINEND;
     if(pname!=GL_PROGRAM_OBJECT_ARB) {
         errorShim(GL_INVALID_ENUM);
@@ -1286,30 +1080,29 @@ GLhandleARB gl4es_glGetHandle(GLenum pname) {
     return glstate->glsl->program;
 }
 
-GLvoid gl4es_glDetachObject(GLhandleARB containerObj, GLhandleARB attachedObj) {
+GLvoid APIENTRY_GL4ES gl4es_glDetachObject(GLhandleARB containerObj, GLhandleARB attachedObj) {
     gl4es_glDetachShader(containerObj, attachedObj);
 }
 
-GLhandleARB gl4es_glCreateProgramObject(GLvoid) {
+GLhandleARB APIENTRY_GL4ES gl4es_glCreateProgramObject(GLvoid) {
     return gl4es_glCreateProgram();
 }
 
-GLvoid gl4es_glAttachObject(GLhandleARB containerObj, GLhandleARB obj) {
+GLvoid APIENTRY_GL4ES gl4es_glAttachObject(GLhandleARB containerObj, GLhandleARB obj) {
     gl4es_glAttachShader(containerObj, obj);
 }
 
-GLvoid gl4es_glUseProgramObject(GLhandleARB programObj) {
+GLvoid APIENTRY_GL4ES gl4es_glUseProgramObject(GLhandleARB programObj) {
     gl4es_glUseProgram(programObj);
 }
 
-GLvoid gl4es_glGetObjectParameterfv(GLhandleARB obj, GLenum pname, GLfloat *params) {
+GLvoid APIENTRY_GL4ES gl4es_glGetObjectParameterfv(GLhandleARB obj, GLenum pname, GLfloat *params) {
     if(!obj)
         return;
     // find type of obj (shader or program)
     program_t *glprogram = NULL;
     khint_t k_program;
     {
-        int ret;
         khash_t(programlist) *programs = glstate->glsl->programs;
         k_program = kh_get(programlist, programs, obj);
         if (k_program != kh_end(programs))
@@ -1324,14 +1117,13 @@ GLvoid gl4es_glGetObjectParameterfv(GLhandleARB obj, GLenum pname, GLfloat *para
 
     params[0] = p[0];   // only 1-sized array here, right?
 }
-GLvoid gl4es_glGetObjectParameteriv(GLhandleARB obj, GLenum pname, GLint *params) {
+GLvoid APIENTRY_GL4ES gl4es_glGetObjectParameteriv(GLhandleARB obj, GLenum pname, GLint *params) {
     if(!obj)
         return;
     // find type of obj (shader or program)
     program_t *glprogram = NULL;
     khint_t k_program;
     {
-        int ret;
         khash_t(programlist) *programs = glstate->glsl->programs;
         k_program = kh_get(programlist, programs, obj);
         if (k_program != kh_end(programs))
@@ -1341,19 +1133,18 @@ GLvoid gl4es_glGetObjectParameteriv(GLhandleARB obj, GLenum pname, GLint *params
         gl4es_glGetProgramiv(obj, pname, params);
     else
         gl4es_glGetShaderiv(obj, pname, params);
-    // hack, some program don't take into account that the lenght return by GL_OBJECT_INFO_LOG_LENGTH_ARB exclude the '\0'.. so adding it here
+    // hack, some programs don't take into account that the length returned by GL_OBJECT_INFO_LOG_LENGTH_ARB exclude the '\0'.. so adding it here
     if(pname==GL_INFO_LOG_LENGTH)
         (*params)++;
 }
 
-GLvoid gl4es_glGetInfoLog(GLhandleARB obj, GLsizei maxLength, GLsizei *length, GLcharARB *infoLog) {
+GLvoid APIENTRY_GL4ES gl4es_glGetInfoLog(GLhandleARB obj, GLsizei maxLength, GLsizei *length, GLcharARB *infoLog) {
     if(!obj)
         return;
     // find type of obj (shader or program)
     program_t *glprogram = NULL;
     khint_t k_program;
     {
-        int ret;
         khash_t(programlist) *programs = glstate->glsl->programs;
         k_program = kh_get(programlist, programs, obj);
         if (k_program != kh_end(programs))
@@ -1366,21 +1157,49 @@ GLvoid gl4es_glGetInfoLog(GLhandleARB obj, GLsizei maxLength, GLsizei *length, G
         gl4es_glGetShaderInfoLog(obj, maxLength, length, infoLog);
 }
 
-GLvoid gl4es_glGetAttachedObjects(GLhandleARB containerObj, GLsizei maxCount, GLsizei *count, GLhandleARB *obj) {
+GLvoid APIENTRY_GL4ES gl4es_glGetAttachedObjects(GLhandleARB containerObj, GLsizei maxCount, GLsizei *count, GLhandleARB *obj) {
     gl4es_glGetAttachedShaders(containerObj, maxCount, count, obj);
 }
 
-GLvoid glDeleteObjectARB(GLhandleARB obj) AliasExport("gl4es_glDeleteObject");
-GLhandleARB glGetHandleARB(GLenum pname) AliasExport("gl4es_glGetHandle");
-GLvoid glDetachObjectARB(GLhandleARB containerObj, GLhandleARB attachedObj) AliasExport("gl4es_glDetachObject");
-GLhandleARB glCreateProgramObjectARB(GLvoid) AliasExport("gl4es_glCreateProgramObject");
-GLvoid glAttachObjectARB(GLhandleARB containerObj, GLhandleARB obj) AliasExport("gl4es_glAttachObject");
-GLvoid glLinkProgramARB(GLhandleARB programObj) AliasExport("gl4es_glLinkProgram");
-GLvoid glUseProgramObjectARB(GLhandleARB programObj) AliasExport("gl4es_glUseProgramObject");
-GLvoid glValidateProgramARB(GLhandleARB programObj) AliasExport("gl4es_glValidateProgram");
-GLvoid glGetObjectParameterfvARB(GLhandleARB obj, GLenum pname, GLfloat *params) AliasExport("gl4es_glGetObjectParameterfv");
-GLvoid glGetObjectParameterivARB(GLhandleARB obj, GLenum pname, GLint *params) AliasExport("gl4es_glGetObjectParameteriv");
-GLvoid glGetInfoLogARB(GLhandleARB obj, GLsizei maxLength, GLsizei *length, GLcharARB *infoLog) AliasExport("gl4es_glGetInfoLog");
-GLvoid glGetAttachedObjectsARB(GLhandleARB containerObj, GLsizei maxCount, GLsizei *count, GLhandleARB *obj) AliasExport("gl4es_glGetAttachedObjects");
-GLint glGetUniformLocationARB(GLhandleARB programObj, const GLcharARB *name) AliasExport("gl4es_glGetUniformLocation");
-GLvoid glGetActiveUniformARB(GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name) AliasExport("gl4es_glGetActiveUniform");
+AliasExport(void,glAttachShader,,(GLuint program, GLuint shader));
+AliasExport(void,glBindAttribLocation,,(GLuint program, GLuint index, const GLchar *name));
+AliasExport_V(GLuint,glCreateProgram);
+AliasExport(void,glDeleteProgram,,(GLuint program));
+AliasExport(void,glDetachShader,,(GLuint program, GLuint shader));
+AliasExport(void,glGetActiveAttrib,,(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name));
+AliasExport(void,glGetAttachedShaders,,(GLuint program, GLsizei maxCount, GLsizei *count, GLuint *shaders));
+AliasExport(GLint,glGetAttribLocation,,(GLuint program, const GLchar *name));
+AliasExport(void,glGetActiveUniform,,(GLuint program, GLuint index, GLsizei bufSize, GLsizei *length, GLint *size, GLenum *type, GLchar *name));
+AliasExport(void,glGetProgramiv,,(GLuint program, GLenum pname, GLint *params));
+AliasExport(GLint,glGetUniformLocation,,(GLuint program, const GLchar *name));
+AliasExport(GLboolean,glIsProgram,,(GLuint program));
+AliasExport(void,glLinkProgram,,(GLuint program));
+AliasExport(void,glUseProgram,,(GLuint program));
+AliasExport(void,glValidateProgram,,(GLuint program));
+AliasExport(void,glGetProgramInfoLog,,(GLuint program, GLsizei maxLength, GLsizei *length, GLchar *infoLog));
+
+AliasExport(void,glGetProgramBinary,,(GLuint program, GLsizei bufSize, GLsizei *length, GLenum *binaryFormat, void *binary));
+AliasExport(void,glProgramBinary,,(GLuint program, GLenum binaryFormat, const void *binary, GLsizei length));
+
+
+// ================ GL_ARB_vertex_shader =================
+AliasExport(GLvoid,glBindAttribLocation,ARB,(GLhandleARB programObj, GLuint index, const GLcharARB *name));
+
+AliasExport(GLvoid,glGetActiveAttrib,ARB,(GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name));
+
+AliasExport(GLint,glGetAttribLocation,ARB,(GLhandleARB programObj, const GLcharARB *name));
+
+AliasExport(GLvoid,glDeleteObject,ARB,(GLhandleARB obj));
+AliasExport(GLhandleARB,glGetHandle,ARB,(GLenum pname));
+AliasExport(GLvoid,glDetachObject,ARB,(GLhandleARB containerObj, GLhandleARB attachedObj));
+AliasExport(GLhandleARB,glCreateProgramObject,ARB,());
+AliasExport(GLvoid,glAttachObject,ARB,(GLhandleARB containerObj, GLhandleARB obj));
+AliasExport(GLvoid,glLinkProgram,ARB,(GLhandleARB programObj));
+AliasExport(GLvoid,glUseProgramObject,ARB,(GLhandleARB programObj));
+AliasExport(GLvoid,glValidateProgram,ARB,(GLhandleARB programObj));
+AliasExport(GLvoid,glGetObjectParameterfv,ARB,(GLhandleARB obj, GLenum pname, GLfloat *params));
+AliasExport(GLvoid,glGetObjectParameteriv,ARB,(GLhandleARB obj, GLenum pname, GLint *params));
+AliasExport(GLvoid,glGetInfoLog,ARB,(GLhandleARB obj, GLsizei maxLength, GLsizei *length, GLcharARB *infoLog));
+AliasExport(GLvoid,glGetAttachedObjects,ARB,(GLhandleARB containerObj, GLsizei maxCount, GLsizei *count, GLhandleARB *obj));
+AliasExport(GLint,glGetUniformLocation,ARB,(GLhandleARB programObj, const GLcharARB *name));
+AliasExport(GLvoid,glGetActiveUniform,ARB,(GLhandleARB programObj, GLuint index, GLsizei maxLength, GLsizei *length, GLint *size, GLenum *type, GLcharARB *name));

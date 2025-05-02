@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "gl4es.h"
 #include "const.h"
 #include "debug.h"
 #include "logs.h"
@@ -19,6 +20,7 @@ static const GLsizei gl_sizeof(GLenum type) {
         case GL_UNSIGNED_INT_2_10_10_10_REV:
         case GL_UNSIGNED_INT_8_8_8_8:
         case GL_UNSIGNED_INT_8_8_8_8_REV:
+        case GL_UNSIGNED_INT_24_8:
         case GL_4_BYTES:
             return 4;
         case GL_3_BYTES:
@@ -73,6 +75,7 @@ static const GLuint gl_max_value(GLenum type) {
 
 static const GLboolean is_type_packed(GLenum type) {
     switch (type) {
+        case GL_DEPTH_STENCIL:
         case GL_4_BYTES:
         case GL_3_BYTES:
         case GL_2_BYTES:
@@ -96,9 +99,11 @@ static const GLboolean is_type_packed(GLenum type) {
 static const GLsizei pixel_sizeof(GLenum format, GLenum type) {
     GLsizei width = 0;
     switch (format) {
+        case GL_R:
         case GL_RED:
 		case GL_ALPHA:
 		case GL_LUMINANCE:
+        case GL_DEPTH_STENCIL:
         case GL_DEPTH_COMPONENT:
         case GL_COLOR_INDEX:
             width = 1;
@@ -115,6 +120,8 @@ static const GLsizei pixel_sizeof(GLenum format, GLenum type) {
         case GL_RGBA:
         case GL_BGRA:
         case GL_RGBA8:
+        case GL_R11F_G11F_B10F:
+        case GL_R32F:
             width = 4;
             break;
         default:
@@ -143,6 +150,7 @@ static const GLboolean pixel_hasalpha(GLenum format) {
     case GL_RGB:
     case GL_BGR:
     case GL_RGB8:
+    case GL_DEPTH_STENCIL:
     case GL_DEPTH_COMPONENT:
 	    return false;
         default:
@@ -157,6 +165,9 @@ static inline const GLboolean valid_vertex_type(GLenum type) {
         case GL_FIXED:
         case GL_FLOAT:
         case GL_SHORT:
+        case GL_UNSIGNED_SHORT:
+        case GL_INT:
+        case GL_UNSIGNED_INT:
             return true;
         default:
             return false;

@@ -10,14 +10,17 @@
 #include "../const.h"
 #include "../../glx/hardext.h"
 #include "../shaderconv.h"
+#include "../gl4es.h"
 
 int NO_OPERATOR_VALUE = 9999;
+
 
 #include <GL/gl.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 // 辅助函数：解析并提取浮点数数组（用于 mat2, mat3, mat4, vec2, vec3, vec4 类型的处理）
 int parse_floats_from_string(const char* str, GLfloat* outValues, int maxCount) {
@@ -62,60 +65,55 @@ void set_uniforms_default_value(GLuint program, uniforms_declarations uniformVec
         {
             break;
         }
-        GLint location = glGetUniformLocation(program, uniform->variable);
+        GLint location = gl4es_glGetUniformLocation(program, uniform->variable);
 
         if (location == -1) {
-            printf("Uniform variable %s not found in shader program.\n", uniform->variable);
+            SHUT_LOGD("Uniform variable %s not found in shader program.\n", uniform->variable);
             continue;
         }
 
-        // 根据 uniform 类型和初始值进行赋值
         if (strstr(uniform->initial_value, "mat4") != NULL) {
-            // 处理 mat4 类型
             GLfloat matValues[16];
             int count = parse_floats_from_string(uniform->initial_value, matValues, 16);
 
-            if (count == 16) { // 检查是否是 4x4 矩阵
-                glUniformMatrix4fv(location, 1, GL_FALSE, matValues);
+            if (count == 16) {
+                gl4es_glUniformMatrix4fv(location, 1, GL_FALSE, matValues);
             }
             else {
-                printf("Invalid mat4 initial value for uniform %s\n", uniform->variable);
+                SHUT_LOGD("Invalid mat4 initial value for uniform %s\n", uniform->variable);
             }
         }
         else if (strstr(uniform->initial_value, "mat3") != NULL) {
-            // 处理 mat3 类型
             GLfloat matValues[9];
             int count = parse_floats_from_string(uniform->initial_value, matValues, 9);
 
-            if (count == 9) { // 检查是否是 3x3 矩阵
-                glUniformMatrix3fv(location, 1, GL_FALSE, matValues);
+            if (count == 9) {
+                gl4es_glUniformMatrix3fv(location, 1, GL_FALSE, matValues);
             }
             else {
-                printf("Invalid mat3 initial value for uniform %s\n", uniform->variable);
+                SHUT_LOGD("Invalid mat3 initial value for uniform %s\n", uniform->variable);
             }
         }
         else if (strstr(uniform->initial_value, "mat2") != NULL) {
-            // 处理 mat2 类型
             GLfloat matValues[4];
             int count = parse_floats_from_string(uniform->initial_value, matValues, 4);
 
-            if (count == 4) { // 检查是否是 2x2 矩阵
-                glUniformMatrix2fv(location, 1, GL_FALSE, matValues);
+            if (count == 4) {
+                gl4es_glUniformMatrix2fv(location, 1, GL_FALSE, matValues);
             }
             else {
-                printf("Invalid mat2 initial value for uniform %s\n", uniform->variable);
+                SHUT_LOGD("Invalid mat2 initial value for uniform %s\n", uniform->variable);
             }
         }
         else if (strstr(uniform->initial_value, "vec4") != NULL) {
-            // 处理 vec4 类型
             GLfloat vecValues[4];
             int count = parse_floats_from_string(uniform->initial_value, vecValues, 4);
 
-            if (count == 4) { // 检查是否是 vec4
-                glUniform4fv(location, 1, vecValues);
+            if (count == 4) {
+                gl4es_glUniform4fv(location, 1, vecValues);
             }
             else {
-                printf("Invalid vec4 initial value for uniform %s\n", uniform->variable);
+                SHUT_LOGD("Invalid vec4 initial value for uniform %s\n", uniform->variable);
             }
         }
         else if (strstr(uniform->initial_value, "vec3") != NULL) {
@@ -123,48 +121,43 @@ void set_uniforms_default_value(GLuint program, uniforms_declarations uniformVec
             GLfloat vecValues[3];
             int count = parse_floats_from_string(uniform->initial_value, vecValues, 3);
 
-            if (count == 3) { // 检查是否是 vec3
-                glUniform3fv(location, 1, vecValues);
+            if (count == 3) {
+                gl4es_glUniform3fv(location, 1, vecValues);
             }
             else {
-                printf("Invalid vec3 initial value for uniform %s\n", uniform->variable);
+                SHUT_LOGD("Invalid vec3 initial value for uniform %s\n", uniform->variable);
             }
         }
         else if (strstr(uniform->initial_value, "vec2") != NULL) {
-            // 处理 vec2 类型
             GLfloat vecValues[2];
             int count = parse_floats_from_string(uniform->initial_value, vecValues, 2);
 
-            if (count == 2) { // 检查是否是 vec2
-                glUniform2fv(location, 1, vecValues);
+            if (count == 2) {
+                gl4es_glUniform2fv(location, 1, vecValues);
             }
             else {
-                printf("Invalid vec2 initial value for uniform %s\n", uniform->variable);
+                SHUT_LOGD("Invalid vec2 initial value for uniform %s\n", uniform->variable);
             }
         }
         else if (strstr(uniform->initial_value, "float") != NULL) {
-            // 处理 float 类型
             GLfloat value = strtof(uniform->initial_value, NULL);
-            glUniform1f(location, value);
+            gl4es_glUniform1f(location, value);
         }
         else if (strstr(uniform->initial_value, "int") != NULL) {
-            // 处理 int 类型
             GLint value = strtol(uniform->initial_value, NULL, 10);
-            glUniform1i(location, value);
+            gl4es_glUniform1i(location, value);
         }
         else if (strstr(uniform->initial_value, "bool") != NULL) {
-            // 处理 bool 类型
             GLint value = parse_bool_from_string(uniform->initial_value);
             if (value != -1) {
-                glUniform1i(location, value);
+                gl4es_glUniform1i(location, value);
             }
             else {
-                printf("Invalid bool initial value for uniform %s\n", uniform->variable);
+                SHUT_LOGD("Invalid bool initial value for uniform %s\n", uniform->variable);
             }
         }
         else if (strstr(uniform->initial_value, "sampler2D") != NULL) {
-            // 处理 sampler2D 类型（纹理）
-            glUniform1i(location, 0);  // 默认绑定到纹理单元 0
+            gl4es_glUniform1i(location, 0);
         }
         else {
             SHUT_LOGE("[ERROR] Unsupported uniform type or invalid initial value for uniform %s\n", uniform->variable);
@@ -172,100 +165,139 @@ void set_uniforms_default_value(GLuint program, uniforms_declarations uniformVec
     }
 }
 
+int startsWith(char* str, char* prefix) {
+    return strncmp(str, prefix, strlen(prefix)) == 0;
+}
+
 char* process_uniform_declarations(char* glslCode, uniforms_declarations uniformVector, int* uniformCount) {
     char* cursor = glslCode;
     char name[256], type[256], initial_value[1024];
     int modifiedCodeIndex = 0;
-    size_t maxLength = 1024 * 10;  // 假设 GLSL 代码不会超过这个长度
-    char* modifiedGlslCode = (char*)malloc(maxLength * sizeof(char));  // 使用 malloc 动态分配内存
-    if (!modifiedGlslCode) return NULL;  // 内存分配失败，返回空
+    size_t maxLength = 1024 * 10;
+    char* modifiedGlslCode = (char*)malloc(maxLength * sizeof(char));
+    if (!modifiedGlslCode) return NULL;
 
     while (*cursor) {
-        if (strncmp(cursor, "uniform", 7) == 0) {  // 查找 "uniform"
-            cursor += 7;  // 跳过 "uniform"
+        if (strncmp(cursor, "uniform", 7) == 0) {
+            char* cursor_start = cursor;
+            
+            cursor += 7;
 
-            // 跳过空格
             while (isspace((unsigned char)*cursor)) cursor++;
 
+            // may be precision qualifier
+            char* precision = NULL;
+            if (startsWith(cursor, "highp")) {
+                precision = " highp";
+                cursor += 5;
+                while (isspace((unsigned char)*cursor)) cursor++;
+            } else if (startsWith(cursor, "lowp")) {
+                precision = " lowp";
+                cursor += 4;
+                while (isspace((unsigned char)*cursor)) cursor++;
+            } else if (startsWith(cursor, "mediump")) {
+                precision = " mediump";
+                cursor += 7;
+                while (isspace((unsigned char)*cursor)) cursor++;
+            }
+
             int i = 0;
-            // 读取类型（如 float、int 等）
             while (isalnum((unsigned char)*cursor) || *cursor == '_') {
                 type[i++] = *cursor++;
             }
-            type[i] = '\0';  // 类型结束
-            while (isspace((unsigned char)*cursor)) cursor++;  // 跳过空格
+            type[i] = '\0';
+
+            while (isspace((unsigned char)*cursor)) cursor++;
+
+            // may be precision qualifier
+            if(!precision)
+            {
+                if (startsWith(cursor, "highp")) {
+                    precision = " highp";
+                    cursor += 5;
+                    while (isspace((unsigned char)*cursor)) cursor++;
+                } else if (startsWith(cursor, "lowp")) {
+                    precision = " lowp";
+                    cursor += 4;
+                    while (isspace((unsigned char)*cursor)) cursor++;
+                } else if (startsWith(cursor, "mediump")) {
+                    precision = " mediump";
+                    cursor += 7;
+                    while (isspace((unsigned char)*cursor)) cursor++;
+                } else {
+                    precision = "";
+                }
+            }
+            
+            while (isspace((unsigned char)*cursor)) cursor++;
 
             i = 0;
-            // 读取变量名
             while (isalnum((unsigned char)*cursor) || *cursor == '_') {
                 name[i++] = *cursor++;
             }
-            name[i] = '\0';  // 变量名结束
-            while (isspace((unsigned char)*cursor)) cursor++;  // 跳过空格
+            name[i] = '\0';
+            while (isspace((unsigned char)*cursor)) cursor++;
 
-            // 检查是否有初始值
-            initial_value[0] = '\0';  // 默认没有初始值
+            initial_value[0] = '\0';
             if (*cursor == '=') {
-                cursor++;  // 跳过 "=" 符号
+                cursor++;
                 i = 0;
-                // 读取初始值，直到遇到分号
                 while (*cursor && *cursor != ';') {
                     initial_value[i++] = *cursor++;
                 }
-                initial_value[i] = '\0';  // 初始值结束
-                trim(initial_value);  // 去除初始值两端的空格
+                initial_value[i] = '\0';
+                trim(initial_value);
             }
 
-            // 存储 uniform 变量信息
             strcpy(uniformVector[*uniformCount].variable, name);
             strcpy(uniformVector[*uniformCount].initial_value, initial_value);
             (*uniformCount)++;
 
-            // 跳过到下一个分号，结束当前声明
             while (*cursor != ';' && *cursor) {
-                cursor++;  // 跳过变量声明部分
+                cursor++;
             }
+            
+            char* cursor_end = cursor;
 
-            // 将 uniform 声明部分添加到 modifiedGlslCode
             int spaceLeft = maxLength - modifiedCodeIndex;
             int len = 0;
 
             if (*initial_value) {
-                // 如果有初始值，只保留定义部分
-                len = snprintf(modifiedGlslCode + modifiedCodeIndex, spaceLeft, "uniform %s %s;", type, name);
+                len = snprintf(modifiedGlslCode + modifiedCodeIndex, spaceLeft, "uniform%s %s %s;", precision, type, name);
             } else {
-                // 如果没有初始值，保留完整的声明
-                len = snprintf(modifiedGlslCode + modifiedCodeIndex, spaceLeft, "uniform %s %s;", type, name);
+                // use original declaration
+                size_t length = cursor_end - cursor_start + 1;
+                if (length < spaceLeft) {
+                    memcpy(modifiedGlslCode + modifiedCodeIndex, cursor_start, length);
+                    len = (int)length;
+                } else {
+                    fprintf(stderr, "Error: Not enough space in buffer\n");
+                }
+                // len = snprintf(modifiedGlslCode + modifiedCodeIndex, spaceLeft, "uniform%s %s %s;", precision, type, name);
             }
 
             if (len < 0 || len >= spaceLeft) {
-                // 如果发生错误或空间不足，返回NULL
                 free(modifiedGlslCode);
                 return NULL;
             }
             modifiedCodeIndex += len;
 
-            // 跳过分号，继续寻找下一个 uniform
             while (*cursor == ';') cursor++;
 
         } else {
-            // 如果不是 uniform，复制当前字符到 modifiedGlslCode
             modifiedGlslCode[modifiedCodeIndex++] = *cursor++;
         }
 
-        // 确保修改后的 GLSL 代码没有超出分配的内存空间
         if (modifiedCodeIndex >= maxLength - 1) {
-            maxLength *= 2;  // 扩展内存
+            maxLength *= 2;
             modifiedGlslCode = (char*)realloc(modifiedGlslCode, maxLength);
-            if (!modifiedGlslCode) return NULL;  // 内存分配失败，返回空
+            if (!modifiedGlslCode) return NULL;
         }
     }
 
-    modifiedGlslCode[modifiedCodeIndex] = '\0';  // 确保字符串结束
-    return modifiedGlslCode;  // 返回动态分配的内存
+    modifiedGlslCode[modifiedCodeIndex] = '\0';
+    return modifiedGlslCode;
 }
-
-
 
 /**
  * Makes more and more destructive conversions to make the shader compile
@@ -302,7 +334,7 @@ char * ConvertShaderConditionally(struct shader_s * shader_source){
 char * ConvertShaderVgpu(struct shader_s * shader_source){
 
     if (globals4es.vgpu_dump){
-        printf("New VGPU Shader source:\n%s\n", shader_source->converted);
+        SHUT_LOGD("New VGPU Shader source:\n%s\n", shader_source->converted);
     }
 
     // Get the shader source
@@ -332,7 +364,7 @@ char * ConvertShaderVgpu(struct shader_s * shader_source){
             source = ReplaceModOperator(source, &sourceLength);
 
             if (globals4es.vgpu_dump){
-                printf("New VGPU Shader conversion:\n%s\n", source);
+                SHUT_LOGD("New VGPU Shader conversion:\n%s\n", source);
             }
 
             return source;
@@ -340,7 +372,7 @@ char * ConvertShaderVgpu(struct shader_s * shader_source){
 
         // Else, skip the conversion
         if (globals4es.vgpu_dump){
-            printf("SKIPPING OLD SHADER CONVERSION \n%s\n", source);
+            SHUT_LOGD("SKIPPING OLD SHADER CONVERSION \n%s\n", source);
         }
         return source;
     }
@@ -420,7 +452,7 @@ char * ConvertShaderVgpu(struct shader_s * shader_source){
     source = ProcessSwitchCases(source, &sourceLength);
 
     if (globals4es.vgpu_dump){
-        printf("New VGPU Shader conversion:\n%s\n", source);
+        SHUT_LOGD("New VGPU Shader conversion:\n%s\n", source);
     }
 
     return source;
@@ -470,7 +502,7 @@ char* FindAndCorrect(char* source, int* length, int mode) {
             char   decltemplate_formatted[VARIABLE_SIZE];
             float  declared_value = 99;
             snprintf(decltemplate_formatted, VARIABLE_SIZE, declaration_template, template_string, "%f");
-            printf("Scanning with template %s\n", decltemplate_formatted);
+            SHUT_LOGD("Scanning with template %s\n", decltemplate_formatted);
             char* scanbase = source;
             while(1) {
                int result = sscanf(scanbase, decltemplate_formatted, &declared_value);
@@ -478,7 +510,7 @@ char* FindAndCorrect(char* source, int* length, int mode) {
                   scanbase++;
                   continue;
                }else if(result == EOF) {
-                  printf("Scanned the whole shader and didn't find declaration for %s with template \"%s\"\n", template_string, decltemplate_formatted);
+                  SHUT_LOGD("Scanned the whole shader and didn't find declaration for %s with template \"%s\"\n", template_string, decltemplate_formatted);
                   abort();
                }
               break;
@@ -1329,7 +1361,7 @@ char * ReplacePrecisionQualifiers(char * source, int * sourceLength, int isVerte
 
     if(!doesShaderVersionContainsES(source)){
         if (globals4es.vgpu_dump) {
-            printf("\nSKIPPING the replacement qualifiers step\n");
+            SHUT_LOGD("\nSKIPPING the replacement qualifiers step\n");
         }
         return source;
     }
@@ -1430,9 +1462,9 @@ int GetClosingTokenPositionTokenOverride(const char * source, int initialTokenPo
     // Step 1: Determine the closing token
     char openingToken = initialToken;
     char * closingTokens = GetClosingTokens(openingToken);
-    printf("Closing tokens: %s", closingTokens);
+    SHUT_LOGD("Closing tokens: %s", closingTokens);
     if (strlen(closingTokens) == 0){
-        printf("No closing tokens, somehow \n");
+        SHUT_LOGD("No closing tokens, somehow \n");
         return initialTokenPosition;
     }
 
@@ -1450,7 +1482,7 @@ int GetClosingTokenPositionTokenOverride(const char * source, int initialTokenPo
             continue;
         }
     }
-    printf("No closing tokens 2 , somehow \n");
+    SHUT_LOGD("No closing tokens 2 , somehow \n");
     return initialTokenPosition; // Nothing found
 }
 

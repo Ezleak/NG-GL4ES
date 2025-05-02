@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -funwind-tables -g -D_THREAD_SAFE -fPIC -stdlib=libc++")
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNOX11 -fPIC -DNO_GBM -DDEFAULT_ES=2 -g -std=gnu99 -funwind-tables -O3 -fvisibility=hidden -include ${CMAKE_SOURCE_DIR}/include/android_debug.h")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DNOX11 -fPIC -DNO_GBM -DDEFAULT_ES=3 -g -std=gnu99 -funwind-tables -O3 -fvisibility=hidden")
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libstdc++")
 
@@ -22,6 +22,9 @@ set(CMAKE_BUILD_TYPE Release)
 include_directories(${CMAKE_SOURCE_DIR}/include )
 
 set(C_SRC_FILES
+        src/gl/string_utils.c
+        src/gl/cJSON.c
+        src/gl/config.c
         src/gl/arbconverter.c
         src/gl/arbgenerator.c
         src/gl/arbhelper.c
@@ -46,7 +49,6 @@ set(C_SRC_FILES
         src/gl/fpe_shader.c
         src/gl/framebuffers.c
         src/gl/gl_lookup.c
-        src/gl/getter.c
         src/gl/gl4es.c
         src/gl/glstate.c
         src/gl/hint.c
@@ -74,7 +76,6 @@ set(C_SRC_FILES
         src/gl/shader_hacks.c
         src/gl/stack.c
         src/gl/stencil.c
-        src/gl/string_utils.c
         src/gl/stubs.c
         src/gl/texenv.c
         src/gl/texgen.c
@@ -95,11 +96,12 @@ set(C_SRC_FILES
         src/glx/gbm.c
         src/glx/streaming.c
         src/gl/vgpu/shaderconv.c
+        src/gl/samplers.c
         )
 
 set(CPP_SRC_FILES
-        src/gl/translator.cpp
         src/glsl/glsl_for_es.cpp
+        src/gl/getter.cpp
         )
 
 set(SRC_FILES ${CPP_SRC_FILES} ${C_SRC_FILES})
@@ -110,13 +112,7 @@ add_library(ng_gl4es SHARED ${SRC_FILES})
 
 target_link_libraries(ng_gl4es
         ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libglslang.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-core.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-cpp.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-glsl.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-reflect.a
-#        ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-util.a
         ${CMAKE_SOURCE_DIR}/libraries/arm64-v8a/libspirv-cross-c-shared.so
-        log
         c
         c++_static
         dl

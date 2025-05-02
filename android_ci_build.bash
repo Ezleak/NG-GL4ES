@@ -13,7 +13,7 @@ cmake_build () {
   # | echo "Build exit code: $?"
   # --verbose
   cd ..
-  cp build-$ANDROID_ABI/libng_gl4es.so lib/$ANDROID_ABI/
+  cp build-$ANDROID_ABI/*.so lib/$ANDROID_ABI/
 }
 
 mkdir -p lib
